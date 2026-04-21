@@ -612,20 +612,37 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
 // ================================================================
 // FIREBASE CONFIGURATION
 // ================================================================
-const firebaseConfig = {
-  apiKey: "AIzaSyDggUUi9T5pT5mLFqj89ViYcNW9mS4SS6c",
-  authDomain: "unique-porfolio-manager.firebaseapp.com",
-  projectId: "unique-porfolio-manager",
-  storageBucket: "unique-porfolio-manager.firebasestorage.app",
-  messagingSenderId: "360233526489",
-  appId: "1:360233526489:web:ff086c258c2e0c59e08ac8"
-};
-
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+var auth = null;
+var db = null;
 var currentUser = null;
 var syncStatus = "offline"; // offline, syncing, synced, error
+var firebaseEnabled = false;
+
+// Try to initialize Firebase (will fail in local file:// environment)
+try {
+  const firebaseConfig = {
+    apiKey: "AIzaSyDggUUi9T5pT5mLFqj89ViYcNW9mS4SS6c",
+    authDomain: "unique-porfolio-manager.firebaseapp.com",
+    projectId: "unique-porfolio-manager",
+    storageBucket: "unique-porfolio-manager.firebasestorage.app",
+    messagingSenderId: "360233526489",
+    appId: "1:360233526489:web:ff086c258c2e0c59e08ac8"
+  };
+  
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+  firebaseEnabled = true;
+  console.log("Firebase initialized successfully");
+} catch(e) {
+  console.warn("Firebase not available (local file or error):", e.message);
+  firebaseEnabled = false;
+  // Hide auth UI if Firebase fails
+  setTimeout(function(){
+    var authUI = $("authUI");
+    if(authUI) authUI.style.display = "none";
+  }, 100);
+}
 
 
 // ================================================================
@@ -1297,7 +1314,7 @@ function saveRVEdit(key){
   if(!isNaN(tg))a.tg=tg;
   recalcRV(a);
   if(!a.recManual)a.rec=autoRec(a);
-  reRV();refreshKPIs();saveToFirestore();closeModal();
+  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm salescloseModal();
 }
 
 function saveRFEdit(key){
@@ -1738,7 +1755,7 @@ function saveNewRV(){
     exist.va=Math.round(totN*ppu*100)/100;
     exist.vi=Math.round((exist.vi+addVI)*100)/100;
     recalcRV(exist);
-    reRV();refreshKPIs();saveToFirestore();closeModal();return;
+    reRV();refreshKPIs(); // Don't save yet - wait for user to confirm salescloseModal();return;
   }
   var va=Math.round(n*ppu*100)/100;
   var vi=Math.round(n*ppc*100)/100;
@@ -1757,7 +1774,7 @@ function saveNewRV(){
     vl:"-",con:false,src:"M",
     rec:{a:"hold",l:"NUEVO ACTIVO",t:"Ingresado manualmente. Actualizar ratios con Finnhub."},
     ri:[],pp:[],ep:[],an:{sb:0,b:0,h:0,s:0}});
-  reRV();refreshKPIs();saveToFirestore();closeModal();
+  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm salescloseModal();
 }
 
 function saveNewRF(){
@@ -1901,9 +1918,22 @@ function loadRealized(){
   }catch(e){}
 }
 function clearStorage(){
-  if(!confirm("Borrar todos los cambios guardados y restaurar datos originales?"))return;
-  ["v6rv","v6rf","v6cr","v6rlzd"].forEach(function(k){localStorage.removeItem(k);});
-  location.reload();
+  if(!confirm("Borrar TODOS los datos guardados (localStorage y Firestore) y restaurar valores originales del HTML?\n\nEsta accion no se puede deshacer."))return;
+  ["v6rv","v6rf","v6cr","v6rlzd","v6snaps","v6aiRec","v6chat"].forEach(function(k){localStorage.removeItem(k);});
+  if(firebaseEnabled&&currentUser){
+    // Also delete from Firestore
+    db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").delete()
+    .then(function(){
+      alert("Datos borrados de la nube y localStorage. La pagina se recargara.");
+      location.reload();
+    })
+    .catch(function(e){
+      alert("Error borrando datos de Firestore: "+e.message+"\n\nLocalStorage limpiado. Recargando...");
+      location.reload();
+    });
+  } else {
+    location.reload();
+  }
 }
 
 // ================================================================
@@ -2090,7 +2120,7 @@ function applyFHUpdates(allItems){
     if(!a.recManual)a.rec=autoRec(a);
     count++;
   });
-  reRV();refreshKPIs();saveToFirestore();
+  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm sales
   closeModal();
   var st=$("fhStatus");
   if(st){st.className="upd-status ok";st.textContent=count+" activos actualizados desde Finnhub.";}
@@ -2146,6 +2176,7 @@ document.addEventListener("DOMContentLoaded",function(){
   setupSort("crt","crh","cr");
   initCharts();
   renderTimeline();
+  updateCashDisplay();
   // Wait for auth state before loading data
   setTimeout(function(){
     if(!currentUser){
@@ -2204,7 +2235,7 @@ function execSellRV(key){
   if(qsell>=a.n){
     var idx=RV.findIndex(function(x){return x.k===key;});
     if(idx>=0)RV.splice(idx,1);
-    reRV();refreshKPIs();saveToFirestore();closeModal();return;
+    reRV();refreshKPIs(); // Don't save yet - wait for user to confirm salescloseModal();return;
   }
   var ppuNow=a.n>0?Math.round(a.va/a.n*100)/100:price;
   a.n-=qsell;
@@ -2347,7 +2378,7 @@ function regenAllRecs(){
   RV.forEach(function(a){
     if(!a.recManual){a.rec=autoRec(a);count++;}
   });
-  reRV();refreshKPIs();saveToFirestore();
+  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm sales
   var st=$("fhStatus");
   if(st){st.className="upd-status ok";st.textContent=count+" recomendaciones recalculadas automaticamente.";}
 }
@@ -2633,10 +2664,19 @@ function runImportIA(){
   }).then(function(d){
     var txt=d.content&&d.content[0]?d.content[0].text:"{}";
     try{
+      // Remove markdown code fences
       txt=txt.replace(/```json|```/g,"").trim();
-      applyImportData(JSON.parse(txt),res);
+      // Extract JSON object from text (find first { to last })
+      var start=txt.indexOf("{");
+      var end=txt.lastIndexOf("}");
+      if(start>=0&&end>start){
+        txt=txt.substring(start,end+1);
+      }
+      var parsed=JSON.parse(txt);
+      applyImportData(parsed,res);
     }catch(e){
-      res.innerHTML='<span style="color:var(--red)">No se pudo parsear respuesta:<br><pre style="font-size:10px;overflow-x:auto;max-height:200px">'+txt+'</pre></span>';
+      console.error("Parse error:",e,"Raw text:",txt);
+      res.innerHTML='<span style="color:var(--red)">Error parseando JSON: '+e.message+'<br><pre style="font-size:10px;overflow-x:auto;max-height:200px">'+txt+'</pre></span>';
     }
   }).catch(function(e){
     res.innerHTML='<span style="color:var(--red)">Error: '+e.message+'</span>';
@@ -2711,7 +2751,7 @@ function applyImportData(parsed,res){
     if(a)pendingSales.push({type:"rv",asset:a,qsold:a.n,ppuNew:null,full:true});
   });
 
-  reRV();refreshKPIs();saveToFirestore();
+  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm sales
 
   // Show results + handle pending sales sequentially
   var html='<div style="margin-bottom:8px;color:var(--green);font-weight:600">Importacion completada:</div>'
@@ -2753,7 +2793,7 @@ function applyImportData(parsed,res){
     processSale(i+1);
   }
   processSale(0);
-  reRV();refreshKPIs();saveToFirestore();
+  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm sales
 }
 
 // ================================================================
@@ -2839,6 +2879,7 @@ function saveSnapshot(){
   }
   saveSnapshots();
   renderTimeline();
+  updateCashDisplay();
   var btn=event&&event.target;
   if(btn){var orig=btn.textContent;btn.textContent="✓ Guardado!";setTimeout(function(){btn.textContent=orig;},1500);}
 }
@@ -2850,6 +2891,7 @@ function deleteLastSnapshot(){
   SNAPSHOTS.pop();
   saveSnapshots();
   renderTimeline();
+  updateCashDisplay();
 }
 
 function clearSnapshots(){
@@ -2858,6 +2900,7 @@ function clearSnapshots(){
   SNAPSHOTS=[];
   saveSnapshots();
   renderTimeline();
+  updateCashDisplay();
 }
 
 var _timelineChart=null;
@@ -3385,9 +3428,31 @@ function deleteRealized(idx){
 
 
 // ================================================================
+// CASH (CAJA) MANAGEMENT
+// ================================================================
+function openCashModal(){
+  $("cashInput").value=CASH;
+  $("cashModal").style.display="flex";
+}
+function closeCashModal(){
+  $("cashModal").style.display="none";
+}
+function saveCash(){
+  CASH=parseFloat($("cashInput").value)||0;
+  updateCashDisplay();
+  saveToFirestore();
+  closeCashModal();
+}
+function updateCashDisplay(){
+  $("cashV").textContent="$"+CASH.toLocaleString();
+  $("cashX").textContent=CASH>0?"Disponible":"Sin fondos";
+}
+
+
+// ================================================================
 // FIREBASE AUTH & SYNC
 // ================================================================
-auth.onAuthStateChanged(function(user){
+if(auth) auth.onAuthStateChanged(function(user){
   if(user){
     currentUser=user;
     $("loginBtn").style.display="none";
@@ -3403,8 +3468,18 @@ auth.onAuthStateChanged(function(user){
     updateSyncStatus("offline");
   }
 });
+else {
+  // Firebase not available - load from localStorage immediately
+  console.log("Using localStorage mode (no Firebase)");
+  setTimeout(function(){
+    loadFromStorage();
+    renderAll();
+    refreshKPIs();
+  }, 100);
+}
 
 function loginWithGoogle(){
+  if(!firebaseEnabled){alert("Firebase no disponible (abre desde GitHub Pages)");return;}
   var provider=new firebase.auth.GoogleAuthProvider();
   auth.signInWithPopup(provider).catch(function(e){
     alert("Error al iniciar sesion: "+e.message);
@@ -3412,6 +3487,7 @@ function loginWithGoogle(){
 }
 
 function logoutUser(){
+  if(!firebaseEnabled)return;
   if(confirm("Cerrar sesion? Los datos locales se mantendran en este navegador.")){
     auth.signOut();
   }
@@ -3428,7 +3504,7 @@ function updateSyncStatus(status){
 }
 
 function loadFromFirestore(){
-  if(!currentUser){loadFromStorage();return;}
+  if(!firebaseEnabled||!currentUser){loadFromStorage();renderAll();refreshKPIs();return;}
   updateSyncStatus("syncing");
   db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").get()
   .then(function(doc){
@@ -3439,18 +3515,21 @@ function loadFromFirestore(){
       if(data.cr)data.cr.forEach(function(s){var c=CR.find(function(x){return x.k===s.k;});if(c)Object.assign(c,s);});
       if(data.realized)REALIZED=data.realized;
       if(data.snapshots)SNAPSHOTS=data.snapshots;
+      if(data.cash!=null)CASH=data.cash;
       renderAll();refreshKPIs();
       updateSyncStatus("synced");
     } else {
-      // No data in cloud, use local defaults
-      loadFromStorage();
-      saveToFirestore(); // push defaults to cloud
+      // No data in cloud yet - use HTML defaults and push to cloud
+      console.log("No cloud data, using defaults from HTML");
+      renderAll();refreshKPIs();
+      setTimeout(function(){saveToFirestore();},1000);
     }
   })
   .catch(function(e){
     console.error("Firestore load error:",e);
     updateSyncStatus("error");
-    loadFromStorage(); // fallback to localStorage
+    alert("Error conectando con Firebase. Verifica las reglas de Firestore y el dominio autorizado.\n\nError: "+e.message);
+    renderAll();refreshKPIs();
   });
 }
 
@@ -3478,5 +3557,22 @@ function saveToFirestore(){
 }
 
 </script>
+
+<!-- Cash Edit Modal -->
+<div class="mo" id="cashModal" style="display:none" onclick="if(event.target===this)closeCashModal()">
+  <div class="mc" style="max-width:400px">
+    <button class="mcls" onclick="closeCashModal()">×</button>
+    <h3 style="margin:0 0 15px 0;color:var(--gold)">💰 Editar Caja</h3>
+    <div style="margin-bottom:15px">
+      <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:5px">Monto disponible (USD)</label>
+      <input type="number" id="cashInput" step="0.01" style="width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:16px;font-family:'IBM Plex Mono',monospace">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-save" onclick="saveCash()">💾 Guardar</button>
+      <button class="btn-ghost" onclick="closeCashModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
