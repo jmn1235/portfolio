@@ -142,6 +142,8 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
   display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .mtitle{font-size:17px;font-weight:700}
 .msub{font-size:11px;color:var(--text3);margin-top:3px}
+.mc{background:var(--bg2);border:1px solid var(--border2);border-radius:13px;
+  width:100%;padding:22px 24px;position:relative;animation:su .2s ease}
 .mcls{background:rgba(255,255,255,.08);border:none;color:var(--text2);cursor:pointer;
   width:28px;height:28px;border-radius:6px;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .mcls:hover{background:rgba(255,255,255,.16)}
@@ -1218,12 +1220,18 @@ function renderSummaryTable(){
       +'</tr>';
   }
   // Cash row
-  tbody+='<tr style="background:var(--bg3)">'
-    +'<td style="padding:9px 12px;font-weight:600;color:#f59e0b">&#128176; Caja (efectivo)</td>'
+  tbody+='<tr style="background:var(--bg3);cursor:pointer" onclick="openCashModal()" title="Click para editar caja">'
+    +'<td style="padding:9px 12px;font-weight:600;color:#f59e0b">&#128176; Caja (efectivo) <span style="font-size:10px;color:var(--text3);font-weight:400">— click para editar</span></td>'
     +'<td class="mono clru" style="text-align:right;padding:9px 12px">-</td>'
     +'<td class="mono" style="text-align:right;padding:9px 12px;font-weight:600;color:#f59e0b">$'+Math.round(CASH||0).toLocaleString()+'</td>'
     +'<td class="mono clru" style="text-align:right;padding:9px 12px">-</td>'
-    +'<td colspan="2" style="text-align:right;padding:9px 12px;font-size:11px;color:var(--text3)">Disponible</td>'
+    +'<td style="text-align:right;padding:9px 12px;font-size:11px;color:var(--text3)">Disponible</td>'
+    +'<td style="text-align:right;padding:5px 10px">'
+    +'<button onclick="event.stopPropagation();_cashMode=\'add\';setCashMode(\'add\');$(\'cashInput\').value=\'\';$(\'cashModal\').style.display=\'flex\';$(\'cashModalCurrent\').textContent=\'$\'+Math.round(CASH||0).toLocaleString();" '
+    +'style="background:none;border:1px solid var(--border2);color:#10b981;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;margin-right:3px" title="Ingresar fondos">+</button>'
+    +'<button onclick="event.stopPropagation();_cashMode=\'sub\';setCashMode(\'sub\');$(\'cashInput\').value=\'\';$(\'cashModal\').style.display=\'flex\';$(\'cashModalCurrent\').textContent=\'$\'+Math.round(CASH||0).toLocaleString();" '
+    +'style="background:none;border:1px solid var(--border2);color:#ef4444;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px" title="Retirar fondos">−</button>'
+    +'</td>'
     +'</tr>';
 
   tbody+='<tr style="background:var(--bg3);border-top:2px solid var(--border2)">'
@@ -1244,21 +1252,29 @@ function renderSummaryTable(){
       +'<button onclick="clearRealized()" class="btn-ghost" style="font-size:10px">Borrar</button></div>'
       +'<div id="realizedHistoryTable" class="tw"><table id="realizedTable" style="font-size:12px"><thead id="realizedHead"><tr style="background:var(--bg3)">';
     ["Activo","Tipo","Cant.","PPC $","P.Venta $","V.Ini $","V.Venta $","P&L $","P&L %","Fecha",""].forEach(function(h,hi){
-      var align=hi===0?"left":"right"; // First column left-aligned
+      var align=hi===0?"left":"right";
       histHtml+='<th data-col="'+hi+'" style="padding:7px 11px;text-align:'+align+';font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);cursor:pointer;user-select:none" onclick="sortRealizedBy('+hi+')">'+h+(hi<10?' &#8597;':'')+'</th>';
     });
     histHtml+='</tr></thead><tbody>';
     REALIZED.forEach(function(r,ri){
+      var vIni=Math.round(r.n*r.ppc*100)/100;
+      var vVenta=Math.round(r.n*r.salePrice*100)/100;
       histHtml+='<tr style="border-bottom:0.5px solid var(--border)">'
         +'<td style="padding:8px 11px;font-weight:600;text-align:left">'+r.k+' <span style="font-size:10px;color:var(--text3)">'+r.nm+'</span></td>'
         +'<td style="padding:8px 11px;text-align:right"><span class="bdg bgr" style="font-size:9px">'+r.type+'</span></td>'
         +'<td class="mono clru" style="padding:8px 11px;text-align:right">'+r.n+'</td>'
         +'<td class="mono clru" style="padding:8px 11px;text-align:right">$'+r.ppc+'</td>'
         +'<td class="mono" style="padding:8px 11px;text-align:right">$'+r.salePrice+'</td>'
+        +'<td class="mono clru" style="padding:8px 11px;text-align:right">$'+vIni.toLocaleString()+'</td>'
+        +'<td class="mono clru" style="padding:8px 11px;text-align:right">$'+vVenta.toLocaleString()+'</td>'
         +'<td class="mono '+(r.pnl>=0?"clrp":"clrn")+'" style="padding:8px 11px;text-align:right;font-weight:600">'+(r.pnl>=0?"+":"")+"$"+Math.abs(Math.round(r.pnl)).toLocaleString()+'</td>'
         +'<td style="padding:8px 11px;text-align:right">'+badge(r.pct)+'</td>'
         +'<td class="mono clru" style="padding:8px 11px;text-align:right">'+r.date+'</td>'
-        +'<td style="padding:4px 8px;text-align:center">'
+        +'<td style="padding:4px 8px;text-align:center;white-space:nowrap">'
+        +'<button onclick="editRealized('+ri+')" title="Editar operacion" '
+        +'style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;margin-right:3px" '
+        +'onmouseover="this.style.color=\'#3b82f6\';this.style.borderColor=\'#3b82f6\'" '
+        +'onmouseout="this.style.color=\'\';this.style.borderColor=\'\'">&#9998;</button>'
         +'<button onclick="deleteRealized('+ri+')" title="Eliminar esta operacion" '
         +'style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px" '
         +'onmouseover="this.style.color=\'#ef4444\';this.style.borderColor=\'#ef4444\'" '
@@ -1266,6 +1282,28 @@ function renderSummaryTable(){
         +'&#128465;</button></td>'
         +'</tr>';
     });
+    // Totals / averages footer row
+    var totN=REALIZED.reduce(function(s,r){return s+r.n;},0);
+    var totVIni=REALIZED.reduce(function(s,r){return s+Math.round(r.n*r.ppc*100)/100;},0);
+    var totVVenta=REALIZED.reduce(function(s,r){return s+Math.round(r.n*r.salePrice*100)/100;},0);
+    var totPnl=REALIZED.reduce(function(s,r){return s+r.pnl;},0);
+    var avgPpc=REALIZED.length>0?Math.round(REALIZED.reduce(function(s,r){return s+r.ppc;},0)/REALIZED.length*100)/100:0;
+    var avgSale=REALIZED.length>0?Math.round(REALIZED.reduce(function(s,r){return s+r.salePrice;},0)/REALIZED.length*100)/100:0;
+    var totPct=totVIni>0?Math.round((totVVenta-totVIni)/totVIni*1000)/10:0;
+    var totSign=totPnl>=0?"+":"";
+    var totCol=totPnl>=0?"var(--green)":"var(--red)";
+    histHtml+='<tfoot><tr style="background:var(--bg3);border-top:2px solid var(--border2)">'
+      +'<td style="padding:8px 11px;font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">TOTAL ('+REALIZED.length+' ops)</td>'
+      +'<td style="padding:8px 11px;text-align:right"></td>'
+      +'<td class="mono" style="padding:8px 11px;text-align:right;font-weight:600;color:var(--text2)">'+totN.toLocaleString()+'</td>'
+      +'<td class="mono" style="padding:8px 11px;text-align:right;font-size:10px;color:var(--text3)">ø $'+avgPpc.toLocaleString()+'</td>'
+      +'<td class="mono" style="padding:8px 11px;text-align:right;font-size:10px;color:var(--text3)">ø $'+avgSale.toLocaleString()+'</td>'
+      +'<td class="mono" style="padding:8px 11px;text-align:right;font-weight:600;color:var(--text2)">$'+Math.round(totVIni).toLocaleString()+'</td>'
+      +'<td class="mono" style="padding:8px 11px;text-align:right;font-weight:600;color:var(--text2)">$'+Math.round(totVVenta).toLocaleString()+'</td>'
+      +'<td class="mono" style="padding:8px 11px;text-align:right;font-weight:700;color:'+totCol+'">'+totSign+'$'+Math.abs(Math.round(totPnl)).toLocaleString()+'</td>'
+      +'<td style="padding:8px 11px;text-align:right">'+badge(totPct)+'</td>'
+      +'<td colspan="2" style="padding:8px 11px;text-align:right;font-size:10px;color:var(--text3)"></td>'
+      +'</tr></tfoot>';
     histHtml+='</tbody></table></div></div>';
   }
   wrap.innerHTML=
@@ -1890,12 +1928,15 @@ function deleteAsset(type,key){
     if(isNaN(sv)){alert("Precio invalido");return;}
     var pnl=Math.round((sv-asset.ppc)*asset.n*100)/100;
     var pct=asset.ppc>0?Math.round((sv-asset.ppc)/asset.ppc*1000)/10:0;
+    var saleAmt=Math.round(asset.n*sv*100)/100;
     REALIZED.push({k:key,nm:asset.nm,n:asset.n,ppc:asset.ppc,salePrice:sv,pnl:pnl,pct:pct,
       date:new Date().toLocaleDateString("es-AR"),type:"RV"});
     saveRealized();
     var idx=RV.findIndex(function(x){return x.k===key;});
     if(idx>=0)RV.splice(idx,1);
     reRV();
+    refreshKPIs();saveToFirestore();
+    askAddToCash(saleAmt,"venta "+key+" ("+asset.n+" u × $"+sv+")");
   } else if(type==="rf"){
     asset=RF.find(function(x){return x.k===key;});
     if(!asset)return;
@@ -1911,6 +1952,8 @@ function deleteAsset(type,key){
     var idx2=RF.findIndex(function(x){return x.k===key;});
     if(idx2>=0)RF.splice(idx2,1);
     reRF();
+    refreshKPIs();saveToFirestore();
+    if(!isNaN(sv2))askAddToCash(sv2,"venta "+key);
   } else {
     asset=CR.find(function(x){return x.k===key;});
     if(!asset)return;
@@ -1927,6 +1970,8 @@ function deleteAsset(type,key){
     var idx3=CR.findIndex(function(x){return x.k===key;});
     if(idx3>=0)CR.splice(idx3,1);
     reCR();
+    refreshKPIs();saveToFirestore();
+    if(!isNaN(sv3))askAddToCash(Math.round(asset.qt*sv3*100)/100,"venta "+key+" ("+asset.qt+" u × $"+sv3+")");
   }
   refreshKPIs();saveToFirestore();
 }
@@ -2278,6 +2323,7 @@ function execBuyRV(key){
   if(isNaN(qty)||qty<=0){alert("Cantidad invalida");return;}
   if(isNaN(price)||price<=0){alert("Precio invalido");return;}
   var oldN=a.n,totN=oldN+qty;
+  var totalCost=Math.round(qty*price*100)/100;
   a.ppc=Math.round((oldN*a.ppc+qty*price)/totN*100)/100;
   a.vi=Math.round((a.vi+qty*price)*100)/100;
   a.d=Math.round((oldN*a.d+qty*dNew)/totN);
@@ -2285,6 +2331,7 @@ function execBuyRV(key){
   a.n=totN;
   a.va=Math.round(totN*ppuNow*100)/100;
   recalcRV(a);if(!a.recManual)a.rec=autoRec(a);reRV();refreshKPIs();saveToFirestore();closeModal();
+  askTakeFromCash(totalCost,"compra "+key+" ("+qty+" u × $"+price+")");
 }
 
 function execSellRV(key){
@@ -2295,13 +2342,16 @@ function execSellRV(key){
   if(qsell>a.n){alert("No podes vender mas de lo que tenes ("+a.n+" noms)");return;}
   var pnl=Math.round((price-a.ppc)*qsell*100)/100;
   var pct=a.ppc>0?Math.round((price-a.ppc)/a.ppc*1000)/10:0;
+  var saleAmount=Math.round(qsell*price*100)/100;
   REALIZED.push({k:key,nm:a.nm,n:qsell,ppc:a.ppc,salePrice:price,pnl:pnl,pct:pct,
     date:new Date().toLocaleDateString("es-AR"),type:"RV"});
   saveRealized();
   if(qsell>=a.n){
     var idx=RV.findIndex(function(x){return x.k===key;});
     if(idx>=0)RV.splice(idx,1);
-    reRV();refreshKPIs(); // Don't save yet - wait for user to confirm salescloseModal();return;
+    reRV();refreshKPIs();saveToFirestore();closeModal();
+    askAddToCash(saleAmount,"venta "+key+" ("+qsell+" u × $"+price+")");
+    return;
   }
   var ppuNow=a.n>0?Math.round(a.va/a.n*100)/100:price;
   a.n-=qsell;
@@ -2309,6 +2359,7 @@ function execSellRV(key){
   a.vi=Math.round(a.n*a.ppc*100)/100;
   if(a.dv)a.dv=Math.round(a.dv*(a.n/(a.n+qsell))*100)/100;
   recalcRV(a);reRV();refreshKPIs();saveToFirestore();closeModal();
+  askAddToCash(saleAmount,"venta "+key+" ("+qsell+" u × $"+price+")");
 }
 
 // ================================================================
@@ -2319,6 +2370,7 @@ function execBuyRF(key){
   var noNew=gn("buyQty"),pc=gn("buyPrice");
   if(isNaN(noNew)||noNew<=0){alert("Nominales invalidos");return;}
   if(isNaN(pc)||pc<=0){alert("Precio invalido");return;}
+  var totalCost=Math.round(noNew*pc/100*100)/100;
   b.no+=noNew;
   var addVI=Math.round(noNew*pc/100*100)/100;
   b.pc=Math.round((b.vi+addVI)/b.no*100*100)/100;
@@ -2328,6 +2380,7 @@ function execBuyRF(key){
   b.rt=Math.round((b.rc+(b.cu||0))*100)/100;
   b.rp=b.vi>0?Math.round(b.rt/b.vi*1000)/10:0;
   reRF();refreshKPIs();saveToFirestore();closeModal();
+  askTakeFromCash(totalCost,"compra "+key+" ("+noNew+" noms @ "+pc+")");
 }
 
 function execSellRF(key){
@@ -2345,7 +2398,9 @@ function execSellRF(key){
   if(noSell>=b.no){
     var idx=RF.findIndex(function(x){return x.k===key;});
     if(idx>=0)RF.splice(idx,1);
-    reRF();refreshKPIs();saveToFirestore();closeModal();return;
+    reRF();refreshKPIs();saveToFirestore();closeModal();
+    askAddToCash(saleTotal,"venta "+key+" ("+noSell+" noms)");
+    return;
   }
   b.no-=noSell;
   b.vi=Math.round(b.no*b.pc/100*100)/100;
@@ -2355,6 +2410,7 @@ function execSellRF(key){
   b.rt=Math.round((b.rc+(b.cu||0))*100)/100;
   b.rp=b.vi>0?Math.round(b.rt/b.vi*1000)/10:0;
   reRF();refreshKPIs();saveToFirestore();closeModal();
+  askAddToCash(saleTotal,"venta "+key+" ("+noSell+" noms)");
 }
 
 // ================================================================
@@ -2365,6 +2421,7 @@ function execBuyCR(key){
   var qtNew=gn("buyQty"),price=gn("buyPrice");
   if(isNaN(qtNew)||qtNew<=0){alert("Cantidad invalida");return;}
   if(isNaN(price)||price<=0){alert("Precio invalido");return;}
+  var totalCost=Math.round(qtNew*price*100)/100;
   var oldQt=c.qt,totQt=oldQt+qtNew;
   c.cp=c.cp?Math.round((oldQt*c.cp+qtNew*price)/totQt*100)/100:price;
   c.vi=Math.round(c.vi+qtNew*price*100)/100;
@@ -2374,7 +2431,7 @@ function execBuyCR(key){
   c.re=Math.round((c.va-c.vi)*100)/100;
   c.rp=c.vi>0?Math.round(c.re/c.vi*1000)/10:0;
   reCR();refreshKPIs();saveToFirestore();closeModal();
-}
+  askTakeFromCash(totalCost,"compra "+key+" ("+qtNew+" u × $"+price+")");}
 
 function execSellCR(key){
   var c=CR.find(function(x){return x.k===key;});if(!c)return;
@@ -2382,6 +2439,7 @@ function execSellCR(key){
   if(isNaN(qsell)||qsell<=0){alert("Cantidad invalida");return;}
   if(isNaN(price)||price<=0){alert("Precio invalido");return;}
   if(qsell>c.qt){alert("No podes vender mas de lo que tenes");return;}
+  var saleAmount=Math.round(qsell*price*100)/100;
   if(c.cp){
     var pnl=Math.round((price-c.cp)*qsell*100)/100;
     REALIZED.push({k:key,nm:c.nm,n:qsell,ppc:c.cp,salePrice:price,pnl:pnl,
@@ -2392,7 +2450,9 @@ function execSellCR(key){
   if(qsell>=c.qt){
     var idx=CR.findIndex(function(x){return x.k===key;});
     if(idx>=0)CR.splice(idx,1);
-    reCR();refreshKPIs();saveToFirestore();closeModal();return;
+    reCR();refreshKPIs();saveToFirestore();closeModal();
+    askAddToCash(saleAmount,"venta "+key+" ("+qsell+" u × $"+price+")");
+    return;
   }
   var ppuNow=c.qt>0?Math.round(c.va/c.qt*100)/100:price;
   c.qt-=qsell;
@@ -2401,7 +2461,7 @@ function execSellCR(key){
   c.re=Math.round((c.va-c.vi)*100)/100;
   c.rp=c.vi>0?Math.round(c.re/c.vi*1000)/10:0;
   reCR();refreshKPIs();saveToFirestore();closeModal();
-}
+  askAddToCash(saleAmount,"venta "+key+" ("+qsell+" u × $"+price+")");}
 
 
 // ================================================================
@@ -3492,26 +3552,140 @@ function deleteRealized(idx){
   refreshKPIs();
 }
 
+function editRealized(idx){
+  var r=REALIZED[idx];
+  if(!r)return;
+  var m=$("editRealizedModal");
+  if(!m)return;
+  $("erIdx").value=idx;
+  $("erK").value=r.k;
+  $("erNm").value=r.nm||"";
+  $("erType").value=r.type||"RV";
+  $("erN").value=r.n;
+  $("erPpc").value=r.ppc;
+  $("erSalePrice").value=r.salePrice;
+  $("erDate").value=r.date||"";
+  updateErCalc();
+  m.style.display="flex";
+}
+function closeEditRealizedModal(){
+  var m=$("editRealizedModal");
+  if(m)m.style.display="none";
+}
+function updateErCalc(){
+  var n=parseFloat($("erN").value)||0;
+  var ppc=parseFloat($("erPpc").value)||0;
+  var sp=parseFloat($("erSalePrice").value)||0;
+  var pnl=Math.round((sp-ppc)*n*100)/100;
+  var pct=ppc>0?Math.round((sp-ppc)/ppc*1000)/10:0;
+  var vIni=Math.round(n*ppc*100)/100;
+  var vVenta=Math.round(n*sp*100)/100;
+  var el=$("erPreview");
+  if(el){
+    var sign=pnl>=0?"+":"";
+    var col=pnl>=0?"var(--green)":"var(--red)";
+    el.innerHTML='V.Ini: <b>$'+vIni.toLocaleString()+'</b> &nbsp;|&nbsp; V.Venta: <b>$'+vVenta.toLocaleString()+'</b> &nbsp;|&nbsp; P&L: <b style="color:'+col+'">'+sign+'$'+Math.abs(Math.round(pnl)).toLocaleString()+'</b> &nbsp;('+sign+pct+'%)';
+  }
+}
+function saveEditRealized(){
+  var idx=parseInt($("erIdx").value);
+  if(isNaN(idx)||!REALIZED[idx])return;
+  var n=parseFloat($("erN").value);
+  var ppc=parseFloat($("erPpc").value);
+  var sp=parseFloat($("erSalePrice").value);
+  if(isNaN(n)||n<=0){alert("Cantidad invalida");return;}
+  if(isNaN(ppc)||ppc<0){alert("PPC invalido");return;}
+  if(isNaN(sp)||sp<0){alert("Precio de venta invalido");return;}
+  var pnl=Math.round((sp-ppc)*n*100)/100;
+  var pct=ppc>0?Math.round((sp-ppc)/ppc*1000)/10:0;
+  REALIZED[idx].k=$("erK").value.trim().toUpperCase()||REALIZED[idx].k;
+  REALIZED[idx].nm=$("erNm").value.trim()||REALIZED[idx].nm;
+  REALIZED[idx].type=$("erType").value||REALIZED[idx].type;
+  REALIZED[idx].n=n;
+  REALIZED[idx].ppc=ppc;
+  REALIZED[idx].salePrice=sp;
+  REALIZED[idx].pnl=pnl;
+  REALIZED[idx].pct=pct;
+  REALIZED[idx].date=$("erDate").value.trim()||REALIZED[idx].date;
+  saveRealized();
+  refreshKPIs();
+  closeEditRealizedModal();
+}
 
+
+// ================================================================
 // ================================================================
 // CASH (CAJA) MANAGEMENT
 // ================================================================
+var _cashMode="set"; // "set" | "add" | "sub"
 function openCashModal(){
-  $("cashInput").value=CASH;
+  _cashMode="set";
+  setCashMode("set");
+  $("cashInput").value="";
+  var cur=$("cashModalCurrent");
+  if(cur)cur.textContent="$"+Math.round(CASH||0).toLocaleString();
   $("cashModal").style.display="flex";
 }
 function closeCashModal(){
   $("cashModal").style.display="none";
 }
+function setCashMode(mode){
+  _cashMode=mode;
+  var labels={set:"Nuevo saldo total (USD)",add:"Monto a ingresar (USD)",sub:"Monto a retirar (USD)"};
+  var lbl=$("cashInputLabel");
+  if(lbl)lbl.textContent=labels[mode]||labels.set;
+  // Highlight active button
+  ["set","add","sub"].forEach(function(m){
+    var btn=$("cashMode"+m.charAt(0).toUpperCase()+m.slice(1));
+    if(!btn)return;
+    if(m===mode){btn.className="btn-save";btn.style.flex="1";btn.style.fontSize="11px";}
+    else{btn.className="btn-ghost";btn.style.flex="1";btn.style.fontSize="11px";}
+  });
+  $("cashInput").value="";
+  $("cashPreview").innerHTML="";
+  var cur=$("cashModalCurrent");
+  if(cur)cur.textContent="$"+Math.round(CASH||0).toLocaleString();
+}
+function previewCashResult(){
+  var val=parseFloat($("cashInput").value)||0;
+  var prev=$("cashPreview");
+  if(!prev)return;
+  var result;
+  if(_cashMode==="set")result=val;
+  else if(_cashMode==="add")result=CASH+val;
+  else result=Math.max(0,CASH-val);
+  if($("cashInput").value===""){prev.innerHTML="";return;}
+  prev.innerHTML='Resultado: <b class="mono" style="color:#f59e0b">$'+Math.round(result).toLocaleString()+'</b>';
+}
 function saveCash(){
-  CASH=parseFloat($("cashInput").value)||0;
+  var val=parseFloat($("cashInput").value);
+  if(isNaN(val)||val<0){alert("Monto invalido");return;}
+  if(_cashMode==="set")CASH=val;
+  else if(_cashMode==="add")CASH=Math.round((CASH+val)*100)/100;
+  else CASH=Math.max(0,Math.round((CASH-val)*100)/100);
   updateCashDisplay();
   saveToFirestore();
   closeCashModal();
+  refreshKPIs();
 }
 function updateCashDisplay(){
   var kc=$("k-cash");
-  if(kc)kc.textContent="$"+CASH.toLocaleString();
+  if(kc)kc.textContent="$"+Math.round(CASH||0).toLocaleString();
+}
+// Helper: pregunta si depositar en caja tras venta
+function askAddToCash(amount,label){
+  if(confirm("¿Depositar "+label+" en Caja?\n\nMonto: $"+Math.round(amount).toLocaleString()+"\nCaja actual: $"+Math.round(CASH).toLocaleString()+"\nCaja nueva: $"+Math.round(CASH+amount).toLocaleString())){
+    CASH=Math.round((CASH+amount)*100)/100;
+    updateCashDisplay();
+  }
+}
+// Helper: pregunta si tomar de caja al comprar
+function askTakeFromCash(amount,label){
+  if(CASH<=0)return;
+  if(confirm("¿Tomar de Caja para "+label+"?\n\nMonto: $"+Math.round(amount).toLocaleString()+"\nCaja actual: $"+Math.round(CASH).toLocaleString()+"\nCaja nueva: $"+Math.round(Math.max(0,CASH-amount)).toLocaleString())){
+    CASH=Math.max(0,Math.round((CASH-amount)*100)/100);
+    updateCashDisplay();
+  }
 }
 
 
@@ -3600,7 +3774,7 @@ function loadFromFirestore(){
 }
 
 function saveToFirestore(){
-  if(!currentUser){saveToFirestore();return;}
+  if(!currentUser){saveToStorage();return;}
   updateSyncStatus("syncing");
   var data={
     rv:RV.map(function(a){return {k:a.k,n:a.n,ppc:a.ppc,va:a.va,vi:a.vi,dv:a.dv,d:a.d,bd:a.bd,rc:a.rc,rt:a.rt,rp:a.rp,ca:a.ca,pe:a.pe,eps:a.eps,beta:a.beta,dy:a.dy,tg:a.tg,src:a.src,cr:a.cr,tipo:a.tipo,recManual:a.recManual,rec:a.rec||null};}),
@@ -3608,17 +3782,18 @@ function saveToFirestore(){
     cr:CR.map(function(c){return {k:c.k,qt:c.qt,cp:c.cp,pa:c.pa,vi:c.vi,va:c.va,re:c.re,rp:c.rp,ca:c.ca};}),
     realized:REALIZED,
     snapshots:SNAPSHOTS,
+    cash:CASH||0,
     lastUpdate:firebase.firestore.FieldValue.serverTimestamp()
   };
   db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").set(data)
   .then(function(){
     updateSyncStatus("synced");
-    saveToFirestore(); // also save to localStorage as backup
+    saveToStorage(); // also save to localStorage as backup
   })
   .catch(function(e){
     console.error("Firestore save error:",e);
     updateSyncStatus("error");
-    saveToFirestore(); // fallback to localStorage
+    saveToStorage(); // fallback to localStorage
   });
 }
 
@@ -3626,19 +3801,77 @@ function saveToFirestore(){
 
 <!-- Cash Edit Modal -->
 <div class="mo" id="cashModal" style="display:none" onclick="if(event.target===this)closeCashModal()">
-  <div class="mc" style="max-width:400px">
+  <div class="mc" style="max-width:420px">
     <button class="mcls" onclick="closeCashModal()">×</button>
-    <h3 style="margin:0 0 15px 0;color:var(--gold)">💰 Editar Caja</h3>
-    <div style="margin-bottom:15px">
-      <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:5px">Monto disponible (USD)</label>
-      <input type="number" id="cashInput" step="0.01" style="width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:16px;font-family:'IBM Plex Mono',monospace">
+    <h3 style="margin:0 0 15px 0;color:var(--gold)">💰 Caja (Efectivo)</h3>
+    <div style="margin-bottom:12px;background:var(--bg3);border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--text3)">Saldo actual</span>
+      <span class="mono" style="font-size:18px;font-weight:700;color:#f59e0b" id="cashModalCurrent">$0</span>
     </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button onclick="setCashMode('set')" id="cashModeSet" class="btn-save" style="flex:1;font-size:11px">Modificar total</button>
+      <button onclick="setCashMode('add')" id="cashModeAdd" class="btn-ghost" style="flex:1;font-size:11px">+ Ingresar</button>
+      <button onclick="setCashMode('sub')" id="cashModeSub" class="btn-ghost" style="flex:1;font-size:11px">− Retirar</button>
+    </div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:5px" id="cashInputLabel">Nuevo saldo total (USD)</label>
+      <input type="number" id="cashInput" step="0.01" min="0" placeholder="0.00" style="width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:16px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box" oninput="previewCashResult()">
+    </div>
+    <div id="cashPreview" style="font-size:12px;color:var(--text3);margin-bottom:14px;min-height:18px"></div>
     <div style="display:flex;gap:8px">
       <button class="btn-save" onclick="saveCash()">💾 Guardar</button>
       <button class="btn-ghost" onclick="closeCashModal()">Cancelar</button>
     </div>
   </div>
 </div>
+
+<div class="mo" id="editRealizedModal" style="display:none" onclick="if(event.target===this)closeEditRealizedModal()">
+  <div class="mc" style="max-width:460px">
+    <button class="mcls" onclick="closeEditRealizedModal()">×</button>
+    <h3 style="margin:0 0 15px 0;color:var(--gold)">✏️ Editar operación realizada</h3>
+    <input type="hidden" id="erIdx">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Ticker</label>
+        <input id="erK" type="text" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box;text-transform:uppercase">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Tipo</label>
+        <select id="erType" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+          <option value="RV">RV</option>
+          <option value="RF">RF</option>
+          <option value="Cripto">Cripto</option>
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Nombre</label>
+        <input id="erNm" type="text" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Cantidad</label>
+        <input id="erN" type="number" step="any" min="0" oninput="updateErCalc()" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">PPC $ (costo prom./u)</label>
+        <input id="erPpc" type="number" step="any" min="0" oninput="updateErCalc()" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Precio de venta $ (total RF / u RV-CR)</label>
+        <input id="erSalePrice" type="number" step="any" min="0" oninput="updateErCalc()" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Fecha</label>
+        <input id="erDate" type="text" placeholder="dd/mm/aaaa" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+    </div>
+    <div id="erPreview" style="font-size:12px;color:var(--text3);background:var(--bg3);border-radius:6px;padding:9px 12px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-save" onclick="saveEditRealized()">💾 Guardar</button>
+      <button class="btn-ghost" onclick="closeEditRealizedModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 
 </body>
 </html>
