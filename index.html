@@ -3444,8 +3444,8 @@ function saveCash(){
   closeCashModal();
 }
 function updateCashDisplay(){
-  $("cashV").textContent="$"+CASH.toLocaleString();
-  $("cashX").textContent=CASH>0?"Disponible":"Sin fondos";
+  var kc=$("k-cash");
+  if(kc)kc.textContent="$"+CASH.toLocaleString();
 }
 
 
