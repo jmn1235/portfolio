@@ -3743,57 +3743,116 @@ function updateSyncStatus(status){
   ind.textContent="\u25cf "+labels[status];
 }
 
+// Limpia undefined para que Firestore no los rechace
+function cleanObj(obj){
+  if(obj===null||obj===undefined)return null;
+  if(Array.isArray(obj))return obj.map(cleanObj);
+  if(typeof obj==="object"&&!(obj instanceof Date)){
+    var out={};
+    for(var k in obj){
+      if(Object.prototype.hasOwnProperty.call(obj,k)&&obj[k]!==undefined){
+        out[k]=cleanObj(obj[k]);
+      }
+    }
+    return out;
+  }
+  return obj;
+}
+
 function loadFromFirestore(){
-  if(!firebaseEnabled||!currentUser){loadFromStorage();renderAll();refreshKPIs();return;}
+  if(!firebaseEnabled||!db||!currentUser){loadFromStorage();renderAll();refreshKPIs();return;}
   updateSyncStatus("syncing");
   db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").get()
   .then(function(doc){
     if(doc.exists){
       var data=doc.data();
-      if(data.rv)data.rv.forEach(function(s){var a=RV.find(function(x){return x.k===s.k;});if(a){Object.assign(a,s);if(!a.rec||!a.rec.a){try{a.rec=autoRec(a);}catch(e){a.rec={a:"hold",l:"MANTENER",t:"",ri:[]};}}}});
-      if(data.rf)data.rf.forEach(function(s){var b=RF.find(function(x){return x.k===s.k;});if(b)Object.assign(b,s);});
-      if(data.cr)data.cr.forEach(function(s){var c=CR.find(function(x){return x.k===s.k;});if(c)Object.assign(c,s);});
+      // FULL REPLACE — la nube es la fuente de verdad
+      // Para cada item, mergeamos con los defaults del HTML para campos de display que puedan faltar
+      if(data.rv&&data.rv.length){
+        var rvDef={};RV.forEach(function(a){rvDef[a.k]=a;});
+        RV=data.rv.map(function(s){
+          var def=rvDef[s.k]||{};
+          var merged=Object.assign({},def,s);
+          if(!merged.rec||!merged.rec.a){
+            try{merged.rec=autoRec(merged);}catch(e){merged.rec={a:"hold",l:"MANTENER",t:"",ri:[]};}
+          }
+          return merged;
+        });
+      }
+      if(data.rf&&data.rf.length){
+        var rfDef={};RF.forEach(function(b){rfDef[b.k]=b;});
+        RF=data.rf.map(function(s){var def=rfDef[s.k]||{};return Object.assign({},def,s);});
+      }
+      if(data.cr&&data.cr.length){
+        var crDef={};CR.forEach(function(c){crDef[c.k]=c;});
+        CR=data.cr.map(function(s){var def=crDef[s.k]||{};return Object.assign({},def,s);});
+      }
       if(data.realized)REALIZED=data.realized;
       if(data.snapshots)SNAPSHOTS=data.snapshots;
       if(data.cash!=null)CASH=data.cash;
       renderAll();refreshKPIs();
       updateSyncStatus("synced");
+      console.log("Firestore OK: "+RV.length+" RV | "+RF.length+" RF | "+CR.length+" CR | CASH $"+CASH);
     } else {
-      // No data in cloud yet - use HTML defaults and push to cloud
-      console.log("No cloud data, using defaults from HTML");
+      // Sin datos en la nube — subir el estado local actual
+      console.log("Sin datos en Firestore. Subiendo datos locales a la nube...");
+      loadFromStorage();
       renderAll();refreshKPIs();
-      setTimeout(function(){saveToFirestore();},1000);
+      setTimeout(function(){saveToFirestore();},800);
     }
   })
   .catch(function(e){
     console.error("Firestore load error:",e);
     updateSyncStatus("error");
-    alert("Error conectando con Firebase. Verifica las reglas de Firestore y el dominio autorizado.\n\nError: "+e.message);
-    renderAll();refreshKPIs();
+    alert("Error conectando con Firebase.\nVerifica reglas de Firestore y dominio autorizado.\n\nError: "+e.message);
+    loadFromStorage();renderAll();refreshKPIs();
   });
 }
 
 function saveToFirestore(){
   if(!currentUser){saveToStorage();return;}
+  if(!firebaseEnabled||!db){saveToStorage();return;}
   updateSyncStatus("syncing");
-  var data={
-    rv:RV.map(function(a){return {k:a.k,n:a.n,ppc:a.ppc,va:a.va,vi:a.vi,dv:a.dv,d:a.d,bd:a.bd,rc:a.rc,rt:a.rt,rp:a.rp,ca:a.ca,pe:a.pe,eps:a.eps,beta:a.beta,dy:a.dy,tg:a.tg,src:a.src,cr:a.cr,tipo:a.tipo,recManual:a.recManual,rec:a.rec||null};}),
-    rf:RF.map(function(b){return {k:b.k,no:b.no,pc:b.pc,pa:b.pa,vi:b.vi,va:b.va,rc:b.rc,cu:b.cu,rt:b.rt,rp:b.rp,ca:b.ca,ti:b.ti};}),
-    cr:CR.map(function(c){return {k:c.k,qt:c.qt,cp:c.cp,pa:c.pa,vi:c.vi,va:c.va,re:c.re,rp:c.rp,ca:c.ca};}),
+  // Guardamos TODOS los campos para que loadFromFirestore pueda hacer replace completo
+  var rawData={
+    rv:RV.map(function(a){return {
+      k:a.k,nm:a.nm||"",br:a.br||"",sec:a.sec||"",tipo:a.tipo||"",cr:a.cr||1,con:a.con||false,
+      n:a.n,ppc:a.ppc,va:a.va,vi:a.vi,dv:a.dv||0,d:a.d,bd:a.bd||null,
+      rc:a.rc,rt:a.rt,rp:a.rp,ca:a.ca||null,
+      pe:a.pe||null,pes:a.pes||null,eps:a.eps||null,epss:a.epss||null,
+      beta:a.beta||null,dy:a.dy||0,tg:a.tg||null,vl:a.vl||"-",src:a.src||"",
+      recManual:a.recManual||false,rec:a.rec||null,
+      pp:a.pp||[],ep:a.ep||[],an:a.an||{sb:0,b:0,h:0,s:0}
+    };}),
+    rf:RF.map(function(b){return {
+      k:b.k,nm:b.nm||"",tp:b.tp||"",tc:b.tc||"",
+      no:b.no,pc:b.pc,pa:b.pa,vi:b.vi,va:b.va,rc:b.rc,cu:b.cu||0,
+      rt:b.rt,rp:b.rp,ca:b.ca||null,ti:b.ti||null,
+      cs:b.cs||"",ve:b.ve||"",mo:b.mo||"USD",
+      rec:b.rec||null,ri:b.ri||[],fl:b.fl||[]
+    };}),
+    cr:CR.map(function(c){return {
+      k:c.k,nm:c.nm||"",fu:c.fu||"",
+      qt:c.qt,cp:c.cp||null,pa:c.pa,vi:c.vi,va:c.va,re:c.re,rp:c.rp,ca:c.ca||null,
+      no:c.no||"",rec:c.rec||""
+    };}),
     realized:REALIZED,
     snapshots:SNAPSHOTS,
     cash:CASH||0,
     lastUpdate:firebase.firestore.FieldValue.serverTimestamp()
   };
+  var data=cleanObj(rawData);
+  // Restaurar serverTimestamp que cleanObj puede haber removido
+  data.lastUpdate=firebase.firestore.FieldValue.serverTimestamp();
   db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").set(data)
   .then(function(){
     updateSyncStatus("synced");
-    saveToStorage(); // also save to localStorage as backup
+    saveToStorage();
   })
   .catch(function(e){
     console.error("Firestore save error:",e);
     updateSyncStatus("error");
-    saveToStorage(); // fallback to localStorage
+    saveToStorage();
   });
 }
 
