@@ -814,6 +814,7 @@ var REC_COLORS={sell:"#ef4444",reduce:"#fbbf24",hold:"#94a3b8",buy:"#10b981",rei
 var FH_KEY="d7f99ehr01qpjqqjuetgd7f99ehr01qpjqqjueu0";
 var SORT={rv:{c:-1,d:1},rf:{c:-1,d:1},cr:{c:-1,d:1}};
 var modalChart1=null,modalChart2=null;
+var _firestoreLoaded=false; // flag para evitar race con setTimeout fallback
 
 
 // ================================================================
@@ -1986,20 +1987,21 @@ function saveToStorage(){
     localStorage.setItem("v6rv",JSON.stringify(RV.map(function(a){return {k:a.k,n:a.n,ppc:a.ppc,va:a.va,vi:a.vi,dv:a.dv,d:a.d,rc:a.rc,rt:a.rt,rp:a.rp,ca:a.ca,pe:a.pe,eps:a.eps,beta:a.beta,dy:a.dy,tg:a.tg,src:a.src,cr:a.cr,tipo:a.tipo,recManual:a.recManual,rec:a.rec||null};})));
     localStorage.setItem("v6rf",JSON.stringify(RF.map(function(b){return {k:b.k,no:b.no,pc:b.pc,pa:b.pa,vi:b.vi,va:b.va,rc:b.rc,cu:b.cu,rt:b.rt,rp:b.rp,ca:b.ca,ti:b.ti};})));
     localStorage.setItem("v6cr",JSON.stringify(CR.map(function(c){return {k:c.k,qt:c.qt,cp:c.cp,vi:c.vi,va:c.va,re:c.re,rp:c.rp};})));
+    localStorage.setItem("v6rlzd",JSON.stringify(REALIZED));
+    localStorage.setItem("v6cash",String(CASH||0));
   }catch(e){console.warn("Storage save:",e);}
 }
 function loadFromStorage(){
   try{
-    // Load saved changes — localStorage persists between versions
-    // Use "Resetear" button or DevTools to clear manually
     var rv=localStorage.getItem("v6rv");
     var rf=localStorage.getItem("v6rf");
     var cr=localStorage.getItem("v6cr");
+    var rlzd=localStorage.getItem("v6rlzd");
+    var cash=localStorage.getItem("v6cash");
     if(rv)JSON.parse(rv).forEach(function(s){
       var a=RV.find(function(x){return x.k===s.k;});
       if(a){
         Object.assign(a,s);
-        // If rec was saved as null (non-manual), restore it via autoRec
         if(!a.rec||!a.rec.a){
           try{a.rec=autoRec(a);}catch(e){a.rec={a:"hold",l:"MANTENER",t:"",ri:[]};}
         }
@@ -2007,6 +2009,14 @@ function loadFromStorage(){
     });
     if(rf)JSON.parse(rf).forEach(function(s){var b=RF.find(function(x){return x.k===s.k;});if(b)Object.assign(b,s);});
     if(cr)JSON.parse(cr).forEach(function(s){var c=CR.find(function(x){return x.k===s.k;});if(c)Object.assign(c,s);});
+    if(rlzd){
+      var stored=JSON.parse(rlzd);
+      stored.forEach(function(s){
+        var dup=REALIZED.find(function(x){return x.k===s.k&&x.date===s.date&&Math.abs(x.pnl-s.pnl)<1;});
+        if(!dup)REALIZED.push(s);
+      });
+    }
+    if(cash!=null)CASH=parseFloat(cash)||0;
   }catch(e){console.warn("Storage load:",e);}
 }
 function saveRealized(){
@@ -2277,11 +2287,9 @@ function initCharts(){
 // INIT
 // ================================================================
 document.addEventListener("DOMContentLoaded",function(){
-  // Firebase auth will trigger loadFromFirestore or loadFromStorage
-  loadRealized();
-  loadSnapshots();
+  // loadRealized / loadSnapshots / loadAIRecs se llaman SOLO si Firebase no logra cargar en tiempo
+  // Para evitar race conditions, dejamos que loadFromFirestore/loadFromStorage los incluya
   loadAIRecs();
-  updateDaysFromDates();
   setTimeout(loadChatHistory,100);
   setupSort("rvt","rvh","rv");
   setupSort("rft","rfh","rf");
@@ -2289,14 +2297,18 @@ document.addEventListener("DOMContentLoaded",function(){
   initCharts();
   renderTimeline();
   updateCashDisplay();
-  // Wait for auth state before loading data
+  // Fallback: si Firebase auth no resolvió en 2.5s, cargar desde localStorage
+  // (Firebase auth normalmente resuelve en <500ms cuando hay sesión activa)
   setTimeout(function(){
-    if(!currentUser){
+    if(!currentUser && !_firestoreLoaded){
+      console.log("Firebase auth timeout — usando localStorage");
       loadFromStorage();
+      loadRealized();
+      loadSnapshots();
       renderAll();
       refreshKPIs();
     }
-  },500);
+  },2500);
 });
 
 
@@ -3761,14 +3773,13 @@ function cleanObj(obj){
 }
 
 function loadFromFirestore(){
-  if(!firebaseEnabled||!db||!currentUser){loadFromStorage();renderAll();refreshKPIs();return;}
+  if(!firebaseEnabled||!db||!currentUser){loadFromStorage();loadRealized();loadSnapshots();renderAll();refreshKPIs();return;}
   updateSyncStatus("syncing");
   db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").get()
   .then(function(doc){
+    _firestoreLoaded=true;
     if(doc.exists){
       var data=doc.data();
-      // FULL REPLACE — la nube es la fuente de verdad
-      // Para cada item, mergeamos con los defaults del HTML para campos de display que puedan faltar
       if(data.rv&&data.rv.length){
         var rvDef={};RV.forEach(function(a){rvDef[a.k]=a;});
         RV=data.rv.map(function(s){
@@ -3791,22 +3802,23 @@ function loadFromFirestore(){
       if(data.realized)REALIZED=data.realized;
       if(data.snapshots)SNAPSHOTS=data.snapshots;
       if(data.cash!=null)CASH=data.cash;
-      renderAll();refreshKPIs();
+      saveToStorage(); // backup local inmediato
+      renderAll();refreshKPIs();renderTimeline();updateCashDisplay();
       updateSyncStatus("synced");
-      console.log("Firestore OK: "+RV.length+" RV | "+RF.length+" RF | "+CR.length+" CR | CASH $"+CASH);
+      fbLog("✅ Carga OK: "+RV.length+" RV | "+RF.length+" RF | "+CR.length+" CR | CASH $"+Math.round(CASH),"#10b981");
     } else {
-      // Sin datos en la nube — subir el estado local actual
-      console.log("Sin datos en Firestore. Subiendo datos locales a la nube...");
-      loadFromStorage();
-      renderAll();refreshKPIs();
+      fbLog("⚠️ Sin datos en nube. Subiendo estado local...","#f59e0b");
+      loadFromStorage();loadRealized();loadSnapshots();
+      renderAll();refreshKPIs();renderTimeline();
       setTimeout(function(){saveToFirestore();},800);
     }
   })
   .catch(function(e){
-    console.error("Firestore load error:",e);
+    _firestoreLoaded=true;
+    fbLog("❌ Error carga Firestore: "+e.code+" — "+e.message,"#ef4444");
     updateSyncStatus("error");
-    alert("Error conectando con Firebase.\nVerifica reglas de Firestore y dominio autorizado.\n\nError: "+e.message);
-    loadFromStorage();renderAll();refreshKPIs();
+    alert("Error conectando con Firebase.\nError: "+e.message);
+    loadFromStorage();loadRealized();loadSnapshots();renderAll();refreshKPIs();
   });
 }
 
@@ -3814,7 +3826,6 @@ function saveToFirestore(){
   if(!currentUser){saveToStorage();return;}
   if(!firebaseEnabled||!db){saveToStorage();return;}
   updateSyncStatus("syncing");
-  // Guardamos TODOS los campos para que loadFromFirestore pueda hacer replace completo
   var rawData={
     rv:RV.map(function(a){return {
       k:a.k,nm:a.nm||"",br:a.br||"",sec:a.sec||"",tipo:a.tipo||"",cr:a.cr||1,con:a.con||false,
@@ -3839,19 +3850,20 @@ function saveToFirestore(){
     };}),
     realized:REALIZED,
     snapshots:SNAPSHOTS,
-    cash:CASH||0,
-    lastUpdate:firebase.firestore.FieldValue.serverTimestamp()
+    cash:CASH||0
   };
   var data=cleanObj(rawData);
-  // Restaurar serverTimestamp que cleanObj puede haber removido
   data.lastUpdate=firebase.firestore.FieldValue.serverTimestamp();
+  fbLog("Guardando en Firestore: "+RV.length+" RV | "+RF.length+" RF | "+CR.length+" CR | CASH $"+Math.round(CASH||0)+"...","#f59e0b");
   db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").set(data)
   .then(function(){
     updateSyncStatus("synced");
     saveToStorage();
+    fbLog("✅ Guardado OK en Firestore ✓","#10b981");
   })
   .catch(function(e){
-    console.error("Firestore save error:",e);
+    fbLog("❌ Error al guardar: "+e.code+" — "+e.message,"#ef4444");
+    if(e.code==="permission-denied")fbLog("→ Verificar reglas Firestore en Firebase Console","#fbbf24");
     updateSyncStatus("error");
     saveToStorage();
   });
