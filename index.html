@@ -240,6 +240,7 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
         <span id="userName" style="font-size:11px;color:var(--text3)"></span>
         <span id="syncIndicator" style="font-size:10px;color:var(--text3)">&#9679; offline</span>
         <button class="btn-ghost" onclick="logoutUser()" style="font-size:10px;padding:3px 8px">Salir</button>
+        <button class="btn-ghost" onclick="openFirebaseDebug()" style="font-size:10px;padding:3px 8px;color:#f59e0b" title="Diagnostico Firebase">🔍</button>
       </div>
     </div>
     <div>
@@ -3856,6 +3857,123 @@ function saveToFirestore(){
   });
 }
 
+// ================================================================
+// FIREBASE DIAGNOSTICS
+// ================================================================
+var _fbLog=[];
+function fbLog(msg,color){
+  var ts=new Date().toLocaleTimeString("es-AR");
+  _fbLog.push({ts:ts,msg:msg,color:color||"var(--text2)"});
+  var el=$("fbLogBody");
+  if(el){
+    el.innerHTML=_fbLog.slice(-30).reverse().map(function(l){
+      return '<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;font-family:\'IBM Plex Mono\',monospace">'
+        +'<span style="color:var(--text3)">'+l.ts+'</span> '
+        +'<span style="color:'+l.color+'">'+l.msg+'</span></div>';
+    }).join("");
+  }
+  console.log("[FB]",msg);
+}
+
+function openFirebaseDebug(){
+  var m=$("fbDebugModal");
+  if(m){m.style.display="flex";refreshFbDebug();}
+}
+function closeFbDebug(){
+  var m=$("fbDebugModal");
+  if(m)m.style.display="none";
+}
+
+function refreshFbDebug(){
+  // Status panel
+  var rows=[
+    ["Firebase habilitado",firebaseEnabled?"✅ SI":"❌ NO",firebaseEnabled?"#10b981":"#ef4444"],
+    ["DB object",db?"✅ OK":"❌ null/undefined",db?"#10b981":"#ef4444"],
+    ["Auth object",auth?"✅ OK":"❌ null/undefined",auth?"#10b981":"#ef4444"],
+    ["Usuario logueado",currentUser?"✅ "+currentUser.email:"❌ No hay sesion",currentUser?"#10b981":"#ef4444"],
+    ["UID",currentUser?currentUser.uid:"—","#94a3b8"],
+    ["Sync status",syncStatus,syncStatus==="synced"?"#10b981":syncStatus==="error"?"#ef4444":"#f59e0b"],
+    ["RV en memoria",RV.length+" activos","#94a3b8"],
+    ["RF en memoria",RF.length+" activos","#94a3b8"],
+    ["CR en memoria",CR.length+" activos","#94a3b8"],
+    ["REALIZED",REALIZED.length+" operaciones","#94a3b8"],
+    ["CASH","$"+Math.round(CASH),"#f59e0b"],
+    ["LocalStorage v6rv",localStorage.getItem("v6rv")?"✅ tiene datos":"⚠️ vacío","#94a3b8"],
+    ["URL actual",location.href,"#64748b"],
+  ];
+  var html=rows.map(function(r){
+    return '<tr><td style="padding:5px 10px;font-size:11px;color:var(--text3);white-space:nowrap">'+r[0]+'</td>'
+      +'<td style="padding:5px 10px;font-size:11px;font-family:\'IBM Plex Mono\',monospace;color:'+r[2]+';word-break:break-all">'+r[1]+'</td></tr>';
+  }).join("");
+  var el=$("fbStatusTable");
+  if(el)el.innerHTML=html;
+}
+
+function fbTestWrite(){
+  fbLog("Iniciando test de escritura...","#f59e0b");
+  if(!firebaseEnabled){fbLog("❌ Firebase no habilitado","#ef4444");return;}
+  if(!db){fbLog("❌ db es null","#ef4444");return;}
+  if(!currentUser){fbLog("❌ No hay usuario logueado","#ef4444");return;}
+  var testData={test:true,ts:new Date().toISOString(),uid:currentUser.uid};
+  fbLog("Escribiendo en /users/"+currentUser.uid+"/portfolio/test_ping ...","#f59e0b");
+  db.collection("users").doc(currentUser.uid).collection("portfolio").doc("test_ping").set(testData)
+  .then(function(){
+    fbLog("✅ ESCRITURA OK — Firestore acepta writes","#10b981");
+    refreshFbDebug();
+  })
+  .catch(function(e){
+    fbLog("❌ ERROR escritura: "+e.code+" — "+e.message,"#ef4444");
+    if(e.code==="permission-denied")fbLog("→ Causa: Reglas de Firestore bloquean la escritura. Verificar en Firebase Console.","#fbbf24");
+    if(e.code==="unavailable")fbLog("→ Causa: Sin conexión a internet o Firebase caído.","#fbbf24");
+    refreshFbDebug();
+  });
+}
+
+function fbTestRead(){
+  fbLog("Iniciando test de lectura...","#f59e0b");
+  if(!firebaseEnabled||!db||!currentUser){fbLog("❌ Firebase/DB/Usuario no disponible","#ef4444");return;}
+  fbLog("Leyendo /users/"+currentUser.uid+"/portfolio/data ...","#f59e0b");
+  db.collection("users").doc(currentUser.uid).collection("portfolio").doc("data").get()
+  .then(function(doc){
+    if(doc.exists){
+      var d=doc.data();
+      fbLog("✅ LECTURA OK — doc.exists=true","#10b981");
+      fbLog("  RV en nube: "+(d.rv?d.rv.length:"0")+" activos","#10b981");
+      fbLog("  RF en nube: "+(d.rf?d.rf.length:"0")+" activos","#10b981");
+      fbLog("  CR en nube: "+(d.cr?d.cr.length:"0")+" activos","#10b981");
+      fbLog("  CASH en nube: $"+(d.cash||0),"#10b981");
+      fbLog("  lastUpdate: "+(d.lastUpdate?d.lastUpdate.toDate().toLocaleString():"no hay"),"#94a3b8");
+    } else {
+      fbLog("⚠️ LECTURA OK pero doc NO existe (primera vez)","#f59e0b");
+    }
+    refreshFbDebug();
+  })
+  .catch(function(e){
+    fbLog("❌ ERROR lectura: "+e.code+" — "+e.message,"#ef4444");
+    if(e.code==="permission-denied")fbLog("→ Reglas de Firestore bloquean lectura. Revisar Firebase Console > Firestore > Reglas.","#fbbf24");
+    refreshFbDebug();
+  });
+}
+
+function fbForceSave(){
+  fbLog("Forzando guardado completo en Firestore...","#f59e0b");
+  if(!currentUser){fbLog("❌ Sin usuario logueado","#ef4444");return;}
+  saveToFirestore();
+  fbLog("saveToFirestore() llamado — revisá el resultado arriba","#94a3b8");
+  setTimeout(refreshFbDebug,2000);
+}
+
+// Interceptar updateSyncStatus para loguear en el panel
+var _origUpdateSync=null;
+setTimeout(function(){
+  _origUpdateSync=updateSyncStatus;
+  updateSyncStatus=function(status){
+    _origUpdateSync(status);
+    var msgs={offline:"⬜ offline",syncing:"🟡 sincronizando...",synced:"🟢 sincronizado ✅",error:"🔴 error"};
+    if(status==="error"||status==="synced")fbLog(msgs[status]||status,status==="synced"?"#10b981":"#ef4444");
+  };
+},500);
+
 </script>
 
 <!-- Cash Edit Modal -->
@@ -3931,6 +4049,49 @@ function saveToFirestore(){
   </div>
 </div>
 
+
+<!-- Firebase Debug Modal -->
+<div class="mo" id="fbDebugModal" style="display:none" onclick="if(event.target===this)closeFbDebug()">
+  <div class="mc" style="max-width:680px;max-height:90vh;overflow-y:auto">
+    <button class="mcls" onclick="closeFbDebug()">×</button>
+    <h3 style="margin:0 0 4px 0;color:#f59e0b">🔍 Diagnóstico Firebase</h3>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:16px">Herramienta para detectar problemas de sincronización con Firestore.</p>
+
+    <!-- Estado actual -->
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Estado actual</div>
+    <div style="background:var(--bg3);border-radius:8px;margin-bottom:14px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse" id="fbStatusTable"></table>
+    </div>
+
+    <!-- Acciones de test -->
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Tests</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn-save" onclick="fbTestRead()" style="font-size:11px">📖 Test Lectura</button>
+      <button class="btn-save" onclick="fbTestWrite()" style="font-size:11px;background:rgba(99,102,241,.25);border-color:#818cf8;color:#818cf8">✏️ Test Escritura</button>
+      <button class="btn-save" onclick="fbForceSave()" style="font-size:11px;background:rgba(16,185,129,.2);border-color:#10b981;color:#10b981">💾 Forzar guardado</button>
+      <button class="btn-save" onclick="refreshFbDebug()" style="font-size:11px;background:rgba(148,163,184,.1);border-color:#334155;color:#94a3b8">🔄 Actualizar estado</button>
+    </div>
+
+    <!-- Log -->
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Log de actividad</div>
+    <div id="fbLogBody" style="background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px;min-height:80px;max-height:220px;overflow-y:auto">
+      <div style="font-size:11px;color:var(--text3);font-family:'IBM Plex Mono',monospace">Esperando actividad...</div>
+    </div>
+
+    <!-- Guia de errores comunes -->
+    <div style="margin-top:14px;background:var(--bg3);border-radius:8px;padding:12px;font-size:11px;color:var(--text3)">
+      <div style="font-weight:700;color:var(--text2);margin-bottom:8px">📋 Causas comunes del problema:</div>
+      <div style="margin-bottom:5px"><span style="color:#ef4444">permission-denied</span> → Las reglas de Firestore bloquean. Ir a Firebase Console → Firestore → Reglas y verificar que estén así:<br>
+      <code style="display:block;margin-top:4px;padding:6px;background:var(--bg);border-radius:4px;color:#10b981;font-size:10px">match /users/{userId}/portfolio/{document=**} {<br>&nbsp;&nbsp;allow read, write: if request.auth != null && request.auth.uid == userId;<br>}</code></div>
+      <div style="margin-bottom:5px"><span style="color:#fbbf24">Dominio no autorizado</span> → Firebase Console → Authentication → Sign-in method → Dominios autorizados. Debe incluir <code>jmn1235.github.io</code></div>
+      <div><span style="color:#fbbf24">Sin sesión</span> → Si el botón muestra "Login con Google" en el header, primero loguéate.</div>
+    </div>
+
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn-ghost" onclick="closeFbDebug()">Cerrar</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
