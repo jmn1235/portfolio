@@ -3695,6 +3695,8 @@ function askAddToCash(amount,label){
   if(confirm("¿Depositar "+label+" en Caja?\n\nMonto: $"+Math.round(amount).toLocaleString()+"\nCaja actual: $"+Math.round(CASH).toLocaleString()+"\nCaja nueva: $"+Math.round(CASH+amount).toLocaleString())){
     CASH=Math.round((CASH+amount)*100)/100;
     updateCashDisplay();
+    refreshKPIs();
+    saveToFirestore();
   }
 }
 // Helper: pregunta si tomar de caja al comprar
@@ -3703,6 +3705,8 @@ function askTakeFromCash(amount,label){
   if(confirm("¿Tomar de Caja para "+label+"?\n\nMonto: $"+Math.round(amount).toLocaleString()+"\nCaja actual: $"+Math.round(CASH).toLocaleString()+"\nCaja nueva: $"+Math.round(Math.max(0,CASH-amount)).toLocaleString())){
     CASH=Math.max(0,Math.round((CASH-amount)*100)/100);
     updateCashDisplay();
+    refreshKPIs();
+    saveToFirestore();
   }
 }
 
