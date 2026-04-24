@@ -380,11 +380,13 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
 <div id="panel-rv" class="panel">
   <div class="upd-bar" style="flex-wrap:wrap;gap:8px">
     <button class="btn-blue" id="fhBtn" onclick="updateFinnhub()">&#128260; Actualizar con Finnhub</button>
+    <button class="btn-blue" style="background:rgba(52,168,83,.2);border-color:#34a853;color:#34a853" onclick="openSheetsConfig()">&#128202; Google Sheets</button>
     <button class="btn-blue" style="background:rgba(99,102,241,.25);border-color:#818cf8" onclick="regenAllRecs()">&#9889; Recalc. Recomendaciones</button>
     <button class="btn-blue" style="background:rgba(245,158,11,.2);border-color:#f59e0b;color:#f59e0b" onclick="openAIAnalysis()">&#129504; Analisis IA</button>
     <button class="btn-ghost" onclick="clearStorage()" style="font-size:11px">&#8635; Resetear</button>
     <div style="flex:1;min-width:200px"><div class="upd-status" id="fhStatus">FH actualiza precios y ratios &middot; IA genera recomendaciones con Claude</div>
-    <div style="font-size:10px;color:var(--text3);margin-top:2px">Badge <span class="src-fh">FH</span>=Finnhub tiempo real &middot; <span style="color:#818cf8">auto</span>=regla &middot; <span style="color:#f59e0b">IA</span>=Claude</div></div>
+    <div id="sheetsStatus" style="font-size:10px;color:#34a853;margin-top:2px;display:none"></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:2px">Badge <span class="src-fh">FH</span>=Finnhub &middot; <span style="color:#34a853">GS</span>=Google Sheets &middot; <span style="color:#818cf8">auto</span>=regla &middot; <span style="color:#f59e0b">IA</span>=Claude</div></div>
   </div>
   <div class="notab"><strong>Fuente ratios:</strong> <span class="src-sa">SA</span>=stockanalysis.com verificado &middot; <span class="src-ap">APX</span>=estimado &middot; <span class="src-fh">FH</span>=Finnhub tiempo real &middot; <span class="src-m">M</span>=manual &middot; Click columna=ordenar &middot; Click fila=detalle completo con graficos P/E y EPS vs sector</div>
   <div class="tw"><table id="rvt">
@@ -2076,11 +2078,25 @@ var FH_MAP={
 // Saltar precio solo si NO hay simbolo mapeado en FH_MAP
 var FH_SKIP_PRICE={"YPF":1}; // YPF: precio local ARG no es directo desde FH sin MEP
 
+// Genera el mapa FH en tiempo real desde RV actual (incluye activos nuevos)
+function buildFHMap(){
+  var map=Object.assign({},FH_MAP); // empieza con los hardcodeados
+  RV.forEach(function(a){
+    if(!map[a.k]){
+      // Para activos nuevos: el símbolo FH es el ticker sin sufijo .E
+      // Si el tipo es CEDEAR o el ticker termina en .E, usar la base
+      var sym=a.k.replace(/\.E$/,"").replace(/\..*$/,"");
+      map[a.k]=sym;
+    }
+  });
+  return map;
+}
+
 function autoUpdateFinnhub(){
-  // Silent background refresh — only updates prices, shows small status
   var status=$("fhStatus");
   if(status){status.className="upd-status";status.textContent="Actualizando precios...";}
-  var tickers=[].concat(Object.keys(FH_MAP).map(function(k){return FH_MAP[k];}));
+  var dynMap=buildFHMap();
+  var tickers=[].concat(Object.values(dynMap));
   tickers=tickers.filter(function(v,i){return tickers.indexOf(v)===i;});
   var base="https://finnhub.io/api/v1";
   function fhGet(p){return fetch(base+p+(p.includes("?")?"&":"?")+"token="+FH_KEY).then(function(r){return r.json();});}
@@ -2092,15 +2108,14 @@ function autoUpdateFinnhub(){
     });
     var upd=0;
     RV.forEach(function(a){
-      var yt=FH_MAP[a.k];if(!yt)return;
+      var yt=dynMap[a.k];if(!yt)return;
       var fhPrice=qMap[yt];
       if(fhPrice&&!FH_SKIP_PRICE[a.k]){
         var cr=a.cr||1;
         var newPpu=Math.round(fhPrice/cr*100)/100;
         var curPpu2=a.n>0?a.va/a.n:0;
-            var diffPct=curPpu2>0?Math.abs(newPpu-curPpu2)/curPpu2:1;
-            if(newPpu>0&&a.n>0&&diffPct<0.6){a.va=Math.round(a.n*newPpu*100)/100;recalcRV(a);if(!a.recManual)a.rec=autoRec(a);upd++;}
-            else if(newPpu>0&&diffPct>=0.6)skipped.push(a.k+"(?ratio)");
+        var diffPct=curPpu2>0?Math.abs(newPpu-curPpu2)/curPpu2:1;
+        if(newPpu>0&&a.n>0&&diffPct<0.6){a.va=Math.round(a.n*newPpu*100)/100;recalcRV(a);if(!a.recManual)a.rec=autoRec(a);upd++;}
       }
     });
     if(upd>0){reRV();refreshKPIs();saveToFirestore();}
@@ -2119,7 +2134,8 @@ function updateFinnhub(){
   btn.disabled=true;
   status.className="upd-status";
   status.textContent="Conectando con Finnhub...";
-  var tickers=[].concat(Object.keys(FH_MAP).map(function(k){return FH_MAP[k];}));
+  var dynMap=buildFHMap();
+  var tickers=[].concat(Object.values(dynMap));
   tickers=tickers.filter(function(v,i){return tickers.indexOf(v)===i;});
   var base="https://finnhub.io/api/v1";
   function fhGet(path){
@@ -2141,7 +2157,7 @@ function updateFinnhub(){
         // Build proposed changes list
         _fhPendingUpdates=[];
         RV.forEach(function(a){
-          var yt=FH_MAP[a.k];if(!yt)return;
+          var yt=dynMap[a.k];if(!yt)return;
           var m=mMap[yt]||{};
           function pick(){for(var i=0;i<arguments.length;i++){var v=arguments[i];if(v!=null&&!isNaN(v)&&isFinite(v))return v;}return null;}
           var pe=pick(m.peBasicExclExtraTTM,m.peNormalizedAnnual,m.peInclExtraTTM);
@@ -2252,6 +2268,257 @@ function applyFHUpdates(allItems){
   var st=$("fhStatus");
   if(st){st.className="upd-status ok";st.textContent=count+" activos actualizados desde Finnhub.";}
   _fhPendingUpdates=[];
+  saveToFirestore();
+}
+
+// ================================================================
+// GOOGLE SHEETS INTEGRATION
+// ================================================================
+// Estructura CSV esperada (fila 1 = header):
+// ticker | gf_symbol | price | pe | eps | beta | high52 | low52 | ratio | name | marketcap
+// Las filas siguientes tienen datos, price/pe/eps/beta/high52/low52 vienen de GOOGLEFINANCE()
+
+function openSheetsConfig(){
+  var m=$("sheetsConfigModal");
+  if(!m)return;
+  var saved=localStorage.getItem("v6sheetsUrl")||"";
+  $("sheetsUrlInput").value=saved;
+  updateSheetsUrlPreview(saved);
+  m.style.display="flex";
+}
+function closeSheetsConfig(){
+  var m=$("sheetsConfigModal");
+  if(m)m.style.display="none";
+}
+function saveSheetsUrl(){
+  var url=($("sheetsUrlInput").value||"").trim();
+  localStorage.setItem("v6sheetsUrl",url);
+  closeSheetsConfig();
+  if(url)updateFromSheets();
+}
+function updateSheetsUrlPreview(url){
+  var el=$("sheetsUrlPreview");
+  if(!el)return;
+  if(!url){el.innerHTML='<span style="color:var(--text3)">Pegar URL del Sheet publicado como CSV</span>';return;}
+  var ok=url.indexOf("docs.google.com/spreadsheets")>=0||url.indexOf("output=csv")>=0;
+  el.innerHTML=ok
+    ?'<span style="color:#34a853">&#10003; URL válida de Google Sheets</span>'
+    :'<span style="color:#f59e0b">⚠ Verificá que sea la URL de publicar como CSV</span>';
+}
+
+function parseCSV(text){
+  // Handles quoted fields, commas inside quotes, CRLF/LF
+  var rows=[];
+  var lines=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
+  lines.forEach(function(line){
+    if(!line.trim())return;
+    var row=[],cur="",inQ=false;
+    for(var i=0;i<line.length;i++){
+      var ch=line[i];
+      if(ch==='"'){inQ=!inQ;}
+      else if(ch===","&&!inQ){row.push(cur.trim());cur="";}
+      else{cur+=ch;}
+    }
+    row.push(cur.trim());
+    rows.push(row);
+  });
+  return rows;
+}
+
+function updateFromSheets(){
+  var url=(localStorage.getItem("v6sheetsUrl")||"").trim();
+  if(!url){openSheetsConfig();return;}
+  var sst=$("sheetsStatus");
+  if(sst){sst.style.display="block";sst.textContent="&#128202; Descargando desde Google Sheets...";}
+
+  // Use CORS proxy via allorigins for cross-origin fetch
+  var proxyUrl="https://api.allorigins.win/raw?url="+encodeURIComponent(url);
+
+  fetch(proxyUrl)
+  .then(function(r){
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    return r.text();
+  })
+  .then(function(text){
+    var rows=parseCSV(text);
+    if(rows.length<2){throw new Error("CSV vacío o sin datos");}
+
+    // Detect header row
+    var hdr=rows[0].map(function(h){return h.toLowerCase().replace(/[^a-z0-9]/g,"");});
+    var idx={
+      ticker:   hdr.indexOf("ticker"),
+      gfsym:    hdr.indexOf("gfsymbol")||hdr.indexOf("symbol"),
+      price:    hdr.indexOf("price"),
+      pe:       hdr.indexOf("pe"),
+      eps:      hdr.indexOf("eps"),
+      beta:     hdr.indexOf("beta"),
+      high52:   hdr.indexOf("high52"),
+      low52:    hdr.indexOf("low52"),
+      ratio:    hdr.indexOf("ratio"),
+      name:     hdr.indexOf("name"),
+    };
+    // Fallback: positional if no header found
+    if(idx.ticker<0){
+      idx={ticker:0,gfsym:1,price:2,pe:3,eps:4,beta:5,high52:6,low52:7,ratio:8,name:9};
+    }
+    function getNum(row,i){if(i<0||i>=row.length)return null;var v=parseFloat(row[i]);return isNaN(v)?null:v;}
+    function getStr(row,i){if(i<0||i>=row.length)return "";return row[i];}
+
+    _fhPendingUpdates=[];
+    rows.slice(1).forEach(function(row){
+      if(!row[idx.ticker])return;
+      var ticker=(row[idx.ticker]||"").toUpperCase().trim();
+      if(!ticker)return;
+      var price=getNum(row,idx.price);
+      var pe=getNum(row,idx.pe);
+      var eps=getNum(row,idx.eps);
+      var beta=getNum(row,idx.beta);
+      var high52=getNum(row,idx.high52);
+      var low52=getNum(row,idx.low52);
+      var cr=getNum(row,idx.ratio);
+      var nameStr=getStr(row,idx.name);
+
+      // Find existing RV asset
+      var a=RV.find(function(x){return x.k===ticker;});
+
+      // If new ticker in sheet: offer to add it
+      if(!a){
+        if(price&&cr){
+          var ppu=Math.round(price/cr*100)/100;
+          var changes=[{field:"NUEVO",old:null,val:ticker+" ("+ppu+"$/u)",unit:""}];
+          _fhPendingUpdates.push({k:ticker,nm:nameStr||ticker,
+            changes:changes,isNew:true,
+            rawPrice:price,rawCr:cr,rawPe:pe,rawEps:eps,rawBeta:beta,
+            rawHigh52:high52,rawLow52:low52,rawPpu:ppu,accepted:true});
+        }
+        return;
+      }
+
+      var curPpu=a.n>0?Math.round(a.va/a.n*100)/100:0;
+      var useCr=cr||a.cr||1;
+      var newPpu=price?Math.round(price/useCr*100)/100:null;
+
+      // Sanity check ±60%
+      if(newPpu&&curPpu>0&&Math.abs(newPpu-curPpu)/curPpu>0.6){newPpu=null;}
+
+      var changes=[];
+      if(newPpu&&Math.abs(newPpu-curPpu)>0.001)
+        changes.push({field:"precio",old:curPpu,val:newPpu,unit:"$/u"});
+      if(pe!=null&&pe!==a.pe)
+        changes.push({field:"P/E",old:a.pe,val:Math.round(pe*100)/100,unit:"x"});
+      if(eps!=null&&eps!==a.eps)
+        changes.push({field:"EPS",old:a.eps,val:Math.round(eps*100)/100,unit:"$"});
+      if(beta!=null&&beta!==a.beta)
+        changes.push({field:"Beta",old:a.beta,val:Math.round(beta*100)/100,unit:""});
+      if(high52!=null)
+        changes.push({field:"Máx 52s",old:null,val:Math.round(high52*100)/100,unit:"$"});
+      if(nameStr&&nameStr!==a.nm&&nameStr.length>1)
+        changes.push({field:"nombre",old:a.nm,val:nameStr,unit:""});
+
+      if(changes.length>0){
+        _fhPendingUpdates.push({k:ticker,nm:a.nm||ticker,
+          changes:changes,isNew:false,
+          rawPrice:price,rawCr:useCr,rawPe:pe,rawEps:eps,rawBeta:beta,
+          rawHigh52:high52,rawLow52:low52,rawPpu:newPpu,accepted:true});
+      }
+    });
+
+    if(sst){sst.textContent="&#128202; "+_fhPendingUpdates.length+" activos con cambios desde Sheets";}
+    if(_fhPendingUpdates.length>0){
+      showSheetsPreview();
+    } else {
+      if(sst)sst.textContent="&#128202; Sheets: sin cambios detectados";
+    }
+  })
+  .catch(function(e){
+    if(sst){sst.style.display="block";sst.textContent="&#128202; Error: "+e.message+" — Verificá que el Sheet esté publicado como CSV";}
+    console.error("Sheets fetch error:",e);
+  });
+}
+
+function showSheetsPreview(){
+  $("modalTitle").textContent="Vista previa — Google Sheets";
+  $("modalSub").innerHTML='<span style="color:#34a853;font-weight:600">&#128202; Google Sheets</span>&nbsp; Confirmá los cambios antes de aplicar';
+  var col=function(txt,c){return '<span style="color:'+c+'">'+txt+'</span>';};
+  var rows=_fhPendingUpdates.map(function(u,ui){
+    var chgHtml=u.changes.map(function(c){
+      var arrow=c.old!=null?('<span style="color:var(--text3)">'+c.old+c.unit+" &rarr; </span>"):"";
+      var color=c.field==="NUEVO"?"#818cf8":c.field==="precio"?(c.val>c.old?"var(--green)":"var(--red)"):"#94a3b8";
+      return '<span style="font-size:10px;margin-right:8px">'+c.field+': '+arrow+col(c.val+c.unit,color)+'</span>';
+    }).join("");
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:7px 10px;white-space:nowrap">'
+      +'<label style="display:flex;align-items:center;gap:7px;cursor:pointer">'
+      +'<input type="checkbox" id="fhck'+ui+'" checked style="width:14px;height:14px;accent-color:#34a853">'
+      +'<span class="fw" style="color:'+(u.isNew?"#818cf8":"var(--text)")+'">'+u.k+'</span>'
+      +' <span style="font-size:10px;color:var(--text3)">'+u.nm.slice(0,20)+'</span>'
+      +(u.isNew?' <span style="font-size:9px;color:#818cf8;margin-left:4px">NUEVO</span>':"")
+      +'</label></td>'
+      +'<td style="padding:7px 10px;font-size:11px">'+chgHtml+'</td>'
+      +'</tr>';
+  }).join("");
+  var body='<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">'
+    +'<button class="btn-save" style="background:rgba(52,168,83,.25);border-color:#34a853;color:#34a853" onclick="applySheetsUpdates(true)">&#10003; Aplicar todos</button>'
+    +'<button class="btn-save" style="background:rgba(99,102,241,.2);border-color:#818cf8;color:#818cf8" onclick="applySheetsUpdates(false)">&#10003; Aplicar seleccionados</button>'
+    +'<button class="btn-save" style="background:rgba(148,163,184,.1);border-color:#334155;color:#94a3b8" onclick="closeModal()">Cancelar</button>'
+    +'<label style="font-size:11px;color:var(--text3);margin-left:auto;display:flex;align-items:center;gap:5px">'
+    +'<input type="checkbox" id="fhChkAll" checked onchange="toggleAllFH(this.checked)" style="accent-color:#34a853">'
+    +'Seleccionar todo</label>'
+    +'</div>'
+    +'<div class="tw"><table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="background:var(--bg3)">'
+    +'<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--text3)">Activo</th>'
+    +'<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--text3)">Cambios desde Sheets</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  $("modalBody").innerHTML=body;
+  $("modalOverlay").classList.add("open");
+  document.body.style.overflow="hidden";
+}
+
+function applySheetsUpdates(allItems){
+  var count=0;
+  var newAssets=[];
+  _fhPendingUpdates.forEach(function(u,i){
+    var ck=$("fhck"+i);
+    if(!allItems&&ck&&!ck.checked)return;
+    // Handle new assets
+    if(u.isNew){
+      var existing=RV.find(function(x){return x.k===u.k;});
+      if(!existing&&u.rawPpu){
+        var vi=Math.round(1*u.rawPpu*100)/100; // placeholder n=1
+        RV.push({k:u.k,nm:u.nm||u.k,br:"Sheets",sec:"N/D",
+          n:1,ppc:u.rawPpu,va:vi,vi:vi,rc:0,dv:0,rt:0,rp:0,ca:0,d:1,
+          bd:new Date().toISOString().slice(0,10),
+          pe:u.rawPe||null,pes:null,eps:u.rawEps||null,epss:null,
+          beta:u.rawBeta||1,dy:0,tg:null,vl:"-",
+          tipo:"CEDEAR",cr:u.rawCr||1,con:false,src:"GS",
+          rec:{a:"hold",l:"NUEVO",t:"Importado desde Google Sheets."},
+          pp:[],ep:[],an:{sb:0,b:0,h:0,s:0}});
+        newAssets.push(u.k);
+        count++;
+      }
+      return;
+    }
+    var a=RV.find(function(x){return x.k===u.k;});if(!a)return;
+    if(u.rawPpu&&a.n>0){a.va=Math.round(a.n*u.rawPpu*100)/100;recalcRV(a);}
+    if(u.rawPe!=null)a.pe=Math.round(u.rawPe*100)/100;
+    if(u.rawEps!=null)a.eps=Math.round(u.rawEps*100)/100;
+    if(u.rawBeta!=null)a.beta=Math.round(u.rawBeta*100)/100;
+    if(u.rawCr&&u.rawCr!==a.cr)a.cr=u.rawCr;
+    a.src="GS";
+    if(!a.recManual)a.rec=autoRec(a);
+    count++;
+  });
+  reRV();refreshKPIs();
+  closeModal();
+  var sst=$("sheetsStatus");
+  if(sst){
+    var msg="&#128202; "+count+" activos actualizados desde Sheets";
+    if(newAssets.length)msg+=" · "+newAssets.length+" nuevos: "+newAssets.join(", ");
+    sst.textContent=msg;
+  }
+  _fhPendingUpdates=[];
+  saveToFirestore();
 }
 
 // ================================================================
@@ -2830,114 +3097,216 @@ function runImportIA(){
 function applyImportData(parsed,res){
   var activos=parsed.activos||[];
   var vendidos=parsed.vendidos||[];
-  var log=[];
-  var pendingSales=[];
+  var userInstr=(gv("impInstr")||"").toLowerCase();
 
-  // Process each detected asset
+  // Detectar si la instrucción es "solo compra de X" (no tocar otros activos)
+  var isSingleBuyMode=userInstr.indexOf("compra")>=0||userInstr.indexOf("toma")>=0||userInstr.indexOf("agreg")>=0;
+  // Si es modo compra puntual, filtrar activos al mencionado en la instrucción
+  var instrTickers=[];
+  if(isSingleBuyMode){
+    RV.forEach(function(a){if(userInstr.indexOf(a.k.toLowerCase())>=0)instrTickers.push(a.k);});
+    // También buscar tickers que aparezcan en la instrucción aunque sean nuevos
+    activos.forEach(function(item){
+      var t=(item.ticker||"").toUpperCase();
+      if(userInstr.indexOf(t.toLowerCase())>=0&&instrTickers.indexOf(t)<0)instrTickers.push(t);
+    });
+  }
+
+  // Construir lista de cambios propuestos (issue 2 — preview antes de aplicar)
+  var proposals=[];
+
   activos.forEach(function(item){
     var ticker=(item.ticker||"").toUpperCase();
+    if(!ticker)return;
+    // Issue 1 — si es modo instrucción puntual, solo procesar el ticker mencionado
+    if(isSingleBuyMode&&instrTickers.length>0&&instrTickers.indexOf(ticker)<0)return;
+
     var nNew=parseFloat(item.nominales)||0;
     var ppuNew=parseFloat(item.ppu)||0;
-    if(!ticker||!ppuNew)return;
+    if(!ppuNew)return;
 
     if(item.tipo==="RV"||!item.tipo){
       var a=RV.find(function(x){return x.k===ticker;});
       if(a){
-        // Update price
         var ppuOld=a.n>0?Math.round(a.va/a.n*100)/100:0;
-        if(ppuNew&&ppuNew!==ppuOld){
-          a.va=Math.round(a.n*ppuNew*100)/100;
-          recalcRV(a);
-          log.push("&#10003; "+ticker+": precio actualizado $"+ppuOld+" &rarr; $"+ppuNew);
-        }
-        // Optional ratio updates from IA
-        if(item.pe!=null&&!isNaN(item.pe)){a.pe=parseFloat(item.pe);a.src="FH";log.push("&#10003; "+ticker+": P/E actualizado a "+item.pe);}
-        if(item.eps!=null&&!isNaN(item.eps)){a.eps=parseFloat(item.eps);log.push("&#10003; "+ticker+": EPS actualizado a "+item.eps);}
-        if(item.beta!=null&&!isNaN(item.beta)){a.beta=parseFloat(item.beta);}
-        if(item.tg!=null&&!isNaN(item.tg)){a.tg=parseFloat(item.tg);}
-        if(item.dy!=null&&!isNaN(item.dy)){a.dy=parseFloat(item.dy);}
-        // Detect quantity change (possible partial sale)
+        var changes=[];
+        if(ppuNew&&ppuNew!==ppuOld)changes.push({field:"precio",old:ppuOld,val:ppuNew,unit:"$/u"});
+        if(item.pe!=null&&!isNaN(item.pe)&&parseFloat(item.pe)!==a.pe)changes.push({field:"P/E",old:a.pe,val:parseFloat(item.pe),unit:"x"});
+        if(item.eps!=null&&!isNaN(item.eps)&&parseFloat(item.eps)!==a.eps)changes.push({field:"EPS",old:a.eps,val:parseFloat(item.eps),unit:"$"});
+        if(item.beta!=null&&!isNaN(item.beta)&&parseFloat(item.beta)!==a.beta)changes.push({field:"Beta",old:a.beta,val:parseFloat(item.beta),unit:""});
+        if(item.tg!=null&&!isNaN(item.tg)&&parseFloat(item.tg)!==a.tg)changes.push({field:"Target",old:a.tg,val:parseFloat(item.tg),unit:"$"});
         if(nNew>0&&Math.abs(nNew-a.n)>0.001){
-          if(nNew<a.n){
-            // Sold some
-            pendingSales.push({type:"rv",asset:a,qsold:a.n-nNew,ppuNew:ppuNew});
-          } else if(nNew>a.n){
-            // Bought more (use current ppu as price)
-            var addN=nNew-a.n;
-            var totN=nNew;
-            a.d=Math.round((a.n*a.d+addN*1)/totN);
-            a.ppc=Math.round((a.n*a.ppc+addN*ppuNew)/totN*100)/100;
-            a.n=totN;
-            a.va=Math.round(totN*ppuNew*100)/100;
-            a.vi=Math.round(totN*a.ppc*100)/100;
-            recalcRV(a);
-            log.push("&#10003; "+ticker+": +"+addN+" noms comprados (ponderado)");
-          }
-          if(!a.recManual)a.rec=autoRec(a);
+          if(nNew<a.n)changes.push({field:"nominales",old:a.n,val:nNew,unit:" (↓ venta parcial)"});
+          else changes.push({field:"nominales",old:a.n,val:nNew,unit:" (↑ compra adicional)"});
         }
+        if(changes.length>0)proposals.push({ticker:ticker,isNew:false,asset:a,item:item,nNew:nNew,ppuNew:ppuNew,changes:changes,accepted:true});
       } else {
-        // New asset — add with basic data
-        var vi=Math.round(nNew*ppuNew*100)/100;
-        RV.push({k:ticker,nm:ticker,br:"Importado",sec:"N/D",n:nNew,ppc:ppuNew,
-          va:vi,vi:vi,rc:0,dv:0,rt:0,rp:0,ca:0,d:1,
-          pe:null,pes:null,eps:null,epss:null,beta:1,dy:0,tg:null,
-          vl:"-",tipo:"CEDEAR",cr:1,con:false,src:"M",
-          rec:{a:"hold",l:"NUEVO",t:"Importado desde captura."},ri:[],pp:[],ep:[],an:{sb:0,b:0,h:0,s:0}});
-        log.push("&#43; "+ticker+": nuevo activo agregado ("+nNew+" noms @ $"+ppuNew+")");
+        // Activo nuevo
+        proposals.push({ticker:ticker,isNew:true,asset:null,item:item,nNew:nNew,ppuNew:ppuNew,
+          changes:[{field:"NUEVO",old:null,val:nNew+"noms@$"+ppuNew,unit:""}],accepted:true});
       }
     }
   });
 
-  // Handle sold assets (not in image but in current RV)
+  // Ventas detectadas
   vendidos.forEach(function(item){
     var ticker=(item.ticker||"").toUpperCase();
     var a=RV.find(function(x){return x.k===ticker;});
-    if(a)pendingSales.push({type:"rv",asset:a,qsold:a.n,ppuNew:null,full:true});
+    if(a)proposals.push({ticker:ticker,isNew:false,isSale:true,asset:a,item:item,nNew:0,ppuNew:0,
+      changes:[{field:"VENTA",old:a.n,val:0,unit:" (detectado vendido)"}],accepted:true});
   });
 
-  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm sales
+  if(proposals.length===0){
+    res.innerHTML='<span style="color:var(--text3)">No se detectaron cambios para aplicar.</span>';
+    return;
+  }
 
-  // Show results + handle pending sales sequentially
-  var html='<div style="margin-bottom:8px;color:var(--green);font-weight:600">Importacion completada:</div>'
-    +log.map(function(l){return '<div>'+l+'</div>';}).join("")
-    +(pendingSales.length?'<div style="margin-top:10px;color:#f59e0b;font-weight:600">Ventas detectadas — confirmar precio:</div>':"");
-  res.innerHTML=html;
+  // Mostrar modal de preview (issue 2)
+  showImportPreview(proposals,res);
+}
 
-  // Process pending sales sequentially with confirm dialogs
+var _importProposals=[];
+function showImportPreview(proposals,res){
+  _importProposals=proposals;
+  var m=$("importPreviewModal");
+  if(!m)return;
+  var rows=proposals.map(function(p,pi){
+    var chgHtml=p.changes.map(function(c){
+      var arrow=c.old!=null?('<span style="color:var(--text3)">'+c.old+c.unit+" → </span>"):"";
+      var color=c.field==="NUEVO"?"#818cf8":c.field==="VENTA"?"#ef4444":c.field==="precio"?(c.val>c.old?"var(--green)":"var(--red)"):"#94a3b8";
+      return '<span style="font-size:10px;margin-right:8px">'+c.field+': '+arrow+'<b style="color:'+color+'">'+c.val+c.unit+'</b></span>';
+    }).join("");
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:7px 10px;white-space:nowrap"><label style="display:flex;align-items:center;gap:7px;cursor:pointer">'
+      +'<input type="checkbox" id="impck'+pi+'" checked style="width:14px;height:14px;accent-color:#10b981">'
+      +'<span class="fw" style="color:'+(p.isNew?"#818cf8":p.isSale?"#ef4444":"var(--text)")+'">'+p.ticker+'</span>'
+      +(p.isNew?' <span style="font-size:9px;color:#818cf8">NUEVO</span>':p.isSale?' <span style="font-size:9px;color:#ef4444">VENTA</span>':' <span style="font-size:9px;color:var(--text3)">'+(p.asset&&p.asset.nm?p.asset.nm.slice(0,18):"")+'</span>')
+      +'</label></td>'
+      +'<td style="padding:7px 10px;font-size:11px">'+chgHtml+'</td></tr>';
+  }).join("");
+  var tbl=$("importPreviewTable");
+  if(tbl)tbl.innerHTML=rows;
+  m.style.display="flex";
+  // store res ref for apply
+  m._res=res;
+}
+
+function closeImportPreview(){
+  var m=$("importPreviewModal");
+  if(m){m.style.display="none";}
+}
+
+function applyImportSelected(){
+  var m=$("importPreviewModal");
+  var res=m?m._res:null;
+  var log=[];
+  var pendingSales=[];
+  var newBuys=[];
+
+  _importProposals.forEach(function(p,pi){
+    var chk=$("impck"+pi);
+    if(!chk||!chk.checked)return;
+    var item=p.item;
+    var ticker=p.ticker;
+
+    if(p.isSale){
+      var a=p.asset;
+      pendingSales.push({type:"rv",asset:a,qsold:a.n,ppuNew:null,full:true});
+      return;
+    }
+    if(p.isNew){
+      // Issue 3 — nuevo activo: usar broker y tipo de la instrucción si se puede
+      var userInstr=(gv("impInstr")||"");
+      var vi=Math.round(p.nNew*p.ppuNew*100)/100;
+      var newA={k:ticker,nm:item.nm||ticker,br:item.broker||"Importado",sec:"N/D",
+        n:p.nNew,ppc:p.ppuNew,va:vi,vi:vi,rc:0,dv:0,rt:0,rp:0,ca:0,d:1,bd:new Date().toISOString().slice(0,10),
+        pe:item.pe||null,pes:null,eps:item.eps||null,epss:null,
+        beta:item.beta||1,dy:item.dy||0,tg:item.tg||null,
+        vl:"-",tipo:item.tipo_cedear||"CEDEAR",cr:item.cr||1,con:false,src:"M",
+        rec:{a:"hold",l:"NUEVO",t:"Importado desde captura."},ri:[],pp:[],ep:[],an:{sb:0,b:0,h:0,s:0}};
+      RV.push(newA);
+      log.push("&#43; "+ticker+": nuevo activo ("+p.nNew+" noms @ $"+p.ppuNew+")");
+      newBuys.push({ticker:ticker,cost:Math.round(p.nNew*p.ppuNew*100)/100});
+      return;
+    }
+
+    var a=p.asset;
+    // Aplicar cambios de precio
+    p.changes.forEach(function(c){
+      if(c.field==="precio"){
+        var ppuOld=a.n>0?Math.round(a.va/a.n*100)/100:0;
+        a.va=Math.round(a.n*c.val*100)/100;
+        recalcRV(a);
+        log.push("&#10003; "+ticker+": precio $"+ppuOld+" → $"+c.val);
+      }
+      if(c.field==="P/E"){a.pe=c.val;a.src="IMP";}
+      if(c.field==="EPS"){a.eps=c.val;}
+      if(c.field==="Beta"){a.beta=c.val;}
+      if(c.field==="Target"){a.tg=c.val;}
+      if(c.field==="nominales"){
+        var nNew=c.val;
+        if(nNew>a.n){
+          var addN=nNew-a.n;
+          var ppu=p.ppuNew;
+          a.ppc=Math.round((a.n*a.ppc+addN*ppu)/(nNew)*100)/100;
+          a.d=Math.round((a.n*a.d+addN*1)/nNew);
+          a.n=nNew;a.va=Math.round(nNew*ppu*100)/100;a.vi=Math.round(nNew*a.ppc*100)/100;
+          recalcRV(a);
+          log.push("&#10003; "+ticker+": +"+addN+" noms comprados");
+          newBuys.push({ticker:ticker,cost:Math.round(addN*ppu*100)/100});
+        } else if(nNew<a.n){
+          pendingSales.push({type:"rv",asset:a,qsold:a.n-nNew,ppuNew:p.ppuNew,full:false});
+        }
+      }
+    });
+    if(!a.recManual)a.rec=autoRec(a);
+  });
+
+  closeImportPreview();
+  reRV();refreshKPIs();
+  // Issue 3 — guardar INMEDIATAMENTE antes de procesar ventas
+  saveToFirestore();
+
+  // Mostrar log
+  if(res){
+    res.innerHTML='<div style="color:var(--green);font-weight:600;margin-bottom:6px">Importación aplicada:</div>'
+      +log.map(function(l){return '<div>'+l+'</div>';}).join("")
+      +(pendingSales.length?'<div style="margin-top:8px;color:#f59e0b;font-weight:600">Ventas detectadas — confirmar precio:</div>':"");
+  }
+
+  // Issue 4 — preguntar caja para nuevas compras
+  newBuys.forEach(function(b){
+    askTakeFromCash(b.cost,"compra "+b.ticker+" (importado)");
+  });
+
+  // Procesar ventas con confirm
   function processSale(i){
     if(i>=pendingSales.length)return;
     var s=pendingSales[i];
     var a=s.asset;
     var ppu=s.ppuNew||Math.round(a.va/a.n*100)/100;
-    var defPrice=ppu;
-    var msg="Venta detectada: "+a.k+(s.full?" (total)":" ("+s.qsold+" de "+a.n+" noms)")
-      +"\nPPC compra: $"+a.ppc
-      +"\nPrecio actual/u: $"+ppu
-      +"\n\nIngresa el PRECIO DE VENTA por unidad (Enter = precio actual):";
-    var sp=prompt(msg,defPrice);
+    var sp=prompt("Venta detectada: "+a.k+(s.full?" (total)":" ("+s.qsold+" noms)")+"\nPPC: $"+a.ppc+"\nPrecio actual: $"+ppu+"\n\nPrecio de venta (Enter = precio actual):",ppu);
     if(sp===null){processSale(i+1);return;}
-    var sv=sp===""?defPrice:parseFloat(sp);
+    var sv=sp===""?ppu:parseFloat(sp);
     if(isNaN(sv)){alert("Precio invalido, se omite.");processSale(i+1);return;}
     var qsell=s.qsold;
     var pnl=Math.round((sv-a.ppc)*qsell*100)/100;
     var pct=a.ppc>0?Math.round((sv-a.ppc)/a.ppc*1000)/10:0;
     REALIZED.push({k:a.k,nm:a.nm,n:qsell,ppc:a.ppc,salePrice:sv,pnl:pnl,pct:pct,
-      date:new Date().toLocaleDateString("es-AR"),type:"RV",src:"importado"});
+      date:new Date().toLocaleDateString("es-AR"),type:"RV"});
     saveRealized();
     if(s.full||qsell>=a.n){
       var idx=RV.findIndex(function(x){return x.k===a.k;});
       if(idx>=0)RV.splice(idx,1);
     } else {
-      a.n-=qsell;
-      a.va=Math.round(a.n*ppu*100)/100;
-      a.vi=Math.round(a.n*a.ppc*100)/100;
-      recalcRV(a);
+      a.n-=qsell;a.va=Math.round(a.n*ppu*100)/100;a.vi=Math.round(a.n*a.ppc*100)/100;recalcRV(a);
     }
-    res.innerHTML+=('<div style="color:var(--green)">&#10003; Venta '+a.k+': P&L $'+(pnl>=0?"+":"")+pnl+' ('+pct+'%) registrado.</div>');
+    if(res)res.innerHTML+=('<div style="color:var(--green)">&#10003; Venta '+a.k+': P&L '+(pnl>=0?"+":"")+'$'+pnl+' ('+pct+'%)</div>');
+    askAddToCash(Math.round(qsell*sv*100)/100,"venta "+a.k+" (importado)");
     processSale(i+1);
   }
   processSale(0);
-  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm sales
+  reRV();refreshKPIs();saveToFirestore();
 }
 
 // ================================================================
@@ -4071,7 +4440,80 @@ setTimeout(function(){
 </div>
 
 
-<!-- Firebase Debug Modal -->
+<!-- Google Sheets Config Modal -->
+<div class="mo" id="sheetsConfigModal" style="display:none" onclick="if(event.target===this)closeSheetsConfig()">
+  <div class="mc" style="max-width:580px">
+    <button class="mcls" onclick="closeSheetsConfig()">×</button>
+    <h3 style="margin:0 0 4px 0;color:#34a853">📊 Google Sheets — Configuración</h3>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:18px">Conectá tu Google Sheet con datos de GOOGLEFINANCE() para actualizar precios y ratios de todos tus activos.</p>
+
+    <!-- Pasos -->
+    <div style="background:var(--bg3);border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:12px;line-height:1.8">
+      <div style="font-weight:700;color:var(--text2);margin-bottom:8px">📋 Cómo configurar (una sola vez):</div>
+      <div><b style="color:#34a853">1.</b> Abrí <a href="https://docs.google.com/spreadsheets/create" target="_blank" style="color:#34a853">Google Sheets</a> y creá una hoja nueva.</div>
+      <div><b style="color:#34a853">2.</b> En la <b>fila 1</b> escribí estos encabezados exactos en columnas A–J:</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--bg);border-radius:6px;padding:8px 10px;margin:6px 0;color:#10b981">
+        ticker &nbsp;|&nbsp; gf_symbol &nbsp;|&nbsp; price &nbsp;|&nbsp; pe &nbsp;|&nbsp; eps &nbsp;|&nbsp; beta &nbsp;|&nbsp; high52 &nbsp;|&nbsp; low52 &nbsp;|&nbsp; ratio &nbsp;|&nbsp; name
+      </div>
+      <div><b style="color:#34a853">3.</b> A partir de la fila 2, en col. A poné el ticker de tu app (ej: <code>GGAL</code>), en col. B el símbolo de Google Finance (ej: <code>GGAL</code> o <code>NASDAQ:CGNX</code>), en col. I el ratio CEDEAR (ej: <code>10</code>), en col. J el nombre.</div>
+      <div><b style="color:#34a853">4.</b> En columna C (price) de la fila 2 pegá: <code style="color:#10b981">=IFERROR(GOOGLEFINANCE(B2,"price"),"")</code> y arrastrá hacia abajo para todos los activos. Igual para D=pe, E=eps, F=beta, G=high52, H=low52.</div>
+      <div><b style="color:#34a853">5.</b> Menú <b>Archivo → Compartir → Publicar en la web</b> → Elegí <b>Hoja 1</b> y formato <b>CSV</b> → click <b>Publicar</b> → copiá la URL.</div>
+      <div><b style="color:#34a853">6.</b> Pegá esa URL abajo y guardá.</div>
+    </div>
+
+    <!-- Ejemplo de fórmulas -->
+    <div style="background:var(--bg);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3)">
+      <div style="color:var(--text2);font-size:11px;margin-bottom:6px;font-family:inherit">Ejemplo fila 2 (GGAL CEDEAR ratio 10):</div>
+      <div>A2: <span style="color:#f59e0b">GGAL</span> &nbsp;|&nbsp; B2: <span style="color:#f59e0b">GGAL</span> &nbsp;|&nbsp; C2: <span style="color:#10b981">=IFERROR(GOOGLEFINANCE(B2,"price"),"")</span></div>
+      <div>D2: <span style="color:#10b981">=IFERROR(GOOGLEFINANCE(B2,"pe"),"")</span> &nbsp;|&nbsp; E2: <span style="color:#10b981">=IFERROR(GOOGLEFINANCE(B2,"eps"),"")</span></div>
+      <div>F2: <span style="color:#10b981">=IFERROR(GOOGLEFINANCE(B2,"beta"),"")</span> &nbsp;|&nbsp; G2: <span style="color:#10b981">=IFERROR(GOOGLEFINANCE(B2,"high52"),"")</span></div>
+      <div>I2: <span style="color:#f59e0b">10</span> &nbsp;(ratio CEDEAR) &nbsp;|&nbsp; J2: <span style="color:#f59e0b">Grupo Financiero Galicia</span></div>
+      <div style="margin-top:6px">Ticker NYSE en BCBA (CGNX.E): B= <span style="color:#f59e0b">NASDAQ:CGNX</span> &nbsp;|&nbsp; I= <span style="color:#f59e0b">ratio tuyo</span></div>
+    </div>
+
+    <!-- URL input -->
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:5px">URL del Sheet publicado como CSV</label>
+      <input type="url" id="sheetsUrlInput" placeholder="https://docs.google.com/spreadsheets/d/e/...pub?output=csv"
+        style="width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box"
+        oninput="updateSheetsUrlPreview(this.value)">
+    </div>
+    <div id="sheetsUrlPreview" style="font-size:11px;min-height:18px;margin-bottom:14px"></div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn-save" style="background:rgba(52,168,83,.25);border-color:#34a853;color:#34a853" onclick="saveSheetsUrl()">💾 Guardar y actualizar</button>
+      <button class="btn-ghost" onclick="closeSheetsConfig()">Cancelar</button>
+      <button class="btn-ghost" style="margin-left:auto;font-size:11px;color:#34a853" onclick="window.open('https://docs.google.com/spreadsheets/create','_blank')">+ Crear Sheet nuevo</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
+<div class="mo" id="importPreviewModal" style="display:none" onclick="if(event.target===this)closeImportPreview()">
+  <div class="mc" style="max-width:680px;max-height:88vh;overflow-y:auto">
+    <button class="mcls" onclick="closeImportPreview()">×</button>
+    <h3 style="margin:0 0 4px 0;color:var(--gold)">📋 Confirmar importación</h3>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:14px">Revisá los cambios detectados. Podés desmarcar los que no querés aplicar.</p>
+    <div style="background:var(--bg3);border-radius:8px;margin-bottom:14px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--bg4)">
+          <th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--text3);text-transform:uppercase">Activo</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--text3);text-transform:uppercase">Cambios detectados</th>
+        </tr></thead>
+        <tbody id="importPreviewTable"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-save" onclick="applyImportSelected()" style="font-size:12px">✅ Aplicar seleccionados</button>
+      <button class="btn-save" onclick="(function(){document.querySelectorAll('[id^=impck]').forEach(function(c){c.checked=true;});applyImportSelected();})()" style="font-size:12px;background:rgba(16,185,129,.2);border-color:#10b981;color:#10b981">✅ Aplicar todos</button>
+      <button class="btn-ghost" onclick="closeImportPreview()" style="font-size:12px">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
 <div class="mo" id="fbDebugModal" style="display:none" onclick="if(event.target===this)closeFbDebug()">
   <div class="mc" style="max-width:680px;max-height:90vh;overflow-y:auto">
     <button class="mcls" onclick="closeFbDebug()">×</button>
