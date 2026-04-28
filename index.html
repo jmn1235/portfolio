@@ -1023,6 +1023,16 @@ function setupSort(tid,hid,sk){
 // BUILD RV ROW
 // ================================================================
 function buildRVRow(a){
+  // Defaults para activos importados que pueden tener campos faltantes
+  if(!a.nm)a.nm=a.k;
+  if(!a.sec)a.sec="N/D";
+  if(!a.br)a.br="Importado";
+  if(a.dv==null)a.dv=0;
+  if(a.rc==null)a.rc=0;
+  if(a.rt==null)a.rt=0;
+  if(a.rp==null)a.rp=0;
+  if(a.ca==null)a.ca=0;
+  if(!a.tipo)a.tipo="CEDEAR";
   var star=a.con?' <span style="font-size:9px;color:var(--gold)">&#9733;</span>':"";
   var brh=a.con?'<span class="btag bt-c">'+a.br+'</span>'
     :a.br==="IOL"?'<span class="btag bt-i">IOL</span>'
@@ -1601,6 +1611,16 @@ function modalBgClick(e){if(e.target===$("modalOverlay"))closeModal();}
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeModal();});
 
 function buildRVModal(a){
+  // Garantizar campos que pueden faltar en activos importados nuevos
+  if(!a.an)a.an={sb:0,b:0,h:0,s:0};
+  if(!a.pp)a.pp=[];
+  if(!a.ep)a.ep=[];
+  if(!a.rec||!a.rec.a){try{a.rec=autoRec(a);}catch(e){a.rec={a:"hold",l:"MANTENER",t:"",ri:[]};}}
+  if(a.nm==null)a.nm=a.k;
+  if(a.sec==null)a.sec="N/D";
+  if(a.br==null)a.br="Importado";
+  if(a.dv==null)a.dv=0;
+  if(a.dy==null)a.dy=0;
   var sh=src(a.src);
   var ppu=a.n>0?Math.round(a.va/a.n*100)/100:0;
   var pvr=a.ppc>0?+((ppu-a.ppc)/a.ppc*100).toFixed(1):0;
@@ -3311,30 +3331,93 @@ function showImportPreview(proposals,res){
   _importProposals=proposals;
   var m=$("importPreviewModal");
   if(!m)return;
+
   var rows=proposals.map(function(p,pi){
-    var chgHtml=p.changes.map(function(c){
-      var arrow=c.old!=null?('<span style="color:var(--text3)">'+c.old+c.unit+" → </span>"):"";
-      var color=c.field==="NUEVO"?"#818cf8":c.field==="VENTA"?"#ef4444":c.field==="precio"?(c.val>c.old?"var(--green)":"var(--red)"):"#94a3b8";
-      return '<span style="font-size:10px;margin-right:8px">'+c.field+': '+arrow+'<b style="color:'+color+'">'+c.val+c.unit+'</b></span>';
-    }).join("");
+    var isNew=p.isNew, isSale=p.isSale;
+    var tickerColor=isNew?"#818cf8":isSale?"#ef4444":"var(--text)";
+    var badge=isNew?'<span style="font-size:9px;color:#818cf8;background:rgba(129,140,248,.12);padding:1px 5px;border-radius:3px;margin-left:4px">NUEVO</span>'
+              :isSale?'<span style="font-size:9px;color:#ef4444;background:rgba(239,68,68,.12);padding:1px 5px;border-radius:3px;margin-left:4px">VENTA</span>'
+              :'<span style="font-size:9px;color:var(--text3);margin-left:4px">'+(p.asset&&p.asset.nm?p.asset.nm.slice(0,22):"")+'</span>';
+
+    // Valores iniciales para los inputs
+    var initNom = p.nNew||0;
+    var initPpu = p.ppuNew||0;
+    var initPpc = (p.asset&&p.asset.ppc)||initPpu;
+    var initTicker = p.ticker;
+    var initNm = (p.item&&p.item.nm)||(p.asset&&p.asset.nm)||"";
+    var initBr = (p.item&&p.item.broker)||(p.asset&&p.asset.br)||"IOL";
+    var initCr = (p.item&&p.item.cr)||(p.asset&&p.asset.cr)||1;
+
+    // Para ventas mostrar solo readonly
+    if(isSale){
+      return '<tr style="border-bottom:1px solid var(--border);background:rgba(239,68,68,.04)">'
+        +'<td style="padding:8px 10px;vertical-align:top">'
+        +'<label style="display:flex;align-items:center;gap:7px;cursor:pointer">'
+        +'<input type="checkbox" id="impck'+pi+'" checked style="width:14px;height:14px;accent-color:#ef4444">'
+        +'<span class="fw" style="color:'+tickerColor+'">'+p.ticker+'</span>'+badge
+        +'</label></td>'
+        +'<td style="padding:8px 10px;font-size:11px;color:var(--text3)">Detectado como vendido — se moverá al historial</td></tr>';
+    }
+
+    var inp=function(id,val,type,label,small){
+      type=type||"number";
+      return '<div style="display:flex;flex-direction:column;gap:2px;min-width:'+(small?"70px":"90px")+'">'
+        +'<span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">'+label+'</span>'
+        +'<input id="imped_'+pi+'_'+id+'" type="'+type+'" value="'+(val!=null?val:"")+'" step="any"'
+        +' style="width:100%;padding:4px 6px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;'
+        +'color:var(--text);font-size:11px;font-family:\'IBM Plex Mono\',monospace;outline:none"'
+        +' onfocus="this.style.borderColor=\'#10b981\'" onblur="this.style.borderColor=\'\'"></div>';
+    };
+    var inpT=function(id,val,label){return inp(id,val,"text",label,false);};
+    var inpN=function(id,val,label,small){return inp(id,val,"number",label,small);};
+
+    var editFields='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:flex-end">';
+    if(isNew){
+      editFields+=inpT("ticker",initTicker,"Ticker");
+      editFields+=inpT("nm",initNm,"Nombre");
+      editFields+=inpN("nom",initNom,"Nominales",true);
+      editFields+=inpN("ppu",initPpu,"Precio/u $",true);
+      editFields+=inpN("cr",initCr,"Ratio",true);
+      editFields+=inpT("br",initBr,"Broker");
+    } else {
+      // Para activos existentes mostrar campos según cambios detectados
+      var hasPrice=p.changes.some(function(c){return c.field==="precio";});
+      var hasNom=p.changes.some(function(c){return c.field==="nominales";});
+      var hasPe=p.changes.some(function(c){return c.field==="P/E";});
+      var hasEps=p.changes.some(function(c){return c.field==="EPS";});
+      var hasBeta=p.changes.some(function(c){return c.field==="Beta";});
+      var hasTg=p.changes.some(function(c){return c.field==="Target";});
+      if(hasPrice)editFields+=inpN("ppu",initPpu,"Precio/u $",true);
+      if(hasNom)editFields+=inpN("nom",initNom,"Nominales",true);
+      if(hasPe){var peC=p.changes.find(function(c){return c.field==="P/E";});editFields+=inpN("pe",peC?peC.val:"","P/E",true);}
+      if(hasEps){var epsC=p.changes.find(function(c){return c.field==="EPS";});editFields+=inpN("eps",epsC?epsC.val:"","EPS $",true);}
+      if(hasBeta){var betaC=p.changes.find(function(c){return c.field==="Beta";});editFields+=inpN("beta",betaC?betaC.val:"","Beta",true);}
+      if(hasTg){var tgC=p.changes.find(function(c){return c.field==="Target";});editFields+=inpN("tg",tgC?tgC.val:"","Target $",true);}
+      // Mostrar PPC actual para referencia
+      editFields+='<div style="display:flex;flex-direction:column;gap:2px">'
+        +'<span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">PPC actual</span>'
+        +'<span class="mono" style="font-size:11px;color:var(--text3);padding:4px 6px">$'+initPpc+'</span></div>';
+    }
+    editFields+='</div>';
+
     return '<tr style="border-bottom:1px solid var(--border)">'
-      +'<td style="padding:7px 10px;white-space:nowrap"><label style="display:flex;align-items:center;gap:7px;cursor:pointer">'
+      +'<td style="padding:8px 10px;vertical-align:top;white-space:nowrap">'
+      +'<label style="display:flex;align-items:center;gap:7px;cursor:pointer">'
       +'<input type="checkbox" id="impck'+pi+'" checked style="width:14px;height:14px;accent-color:#10b981">'
-      +'<span class="fw" style="color:'+(p.isNew?"#818cf8":p.isSale?"#ef4444":"var(--text)")+'">'+p.ticker+'</span>'
-      +(p.isNew?' <span style="font-size:9px;color:#818cf8">NUEVO</span>':p.isSale?' <span style="font-size:9px;color:#ef4444">VENTA</span>':' <span style="font-size:9px;color:var(--text3)">'+(p.asset&&p.asset.nm?p.asset.nm.slice(0,18):"")+'</span>')
+      +'<span class="fw" style="color:'+tickerColor+'">'+p.ticker+'</span>'+badge
       +'</label></td>'
-      +'<td style="padding:7px 10px;font-size:11px">'+chgHtml+'</td></tr>';
+      +'<td style="padding:8px 10px">'+editFields+'</td></tr>';
   }).join("");
+
   var tbl=$("importPreviewTable");
   if(tbl)tbl.innerHTML=rows;
   m.style.display="flex";
-  // store res ref for apply
   m._res=res;
 }
 
 function closeImportPreview(){
   var m=$("importPreviewModal");
-  if(m){m.style.display="none";}
+  if(m)m.style.display="none";
 }
 
 function applyImportSelected(){
@@ -3343,6 +3426,16 @@ function applyImportSelected(){
   var log=[];
   var pendingSales=[];
   var newBuys=[];
+
+  // Helper para leer campos editados del modal
+  function edVal(pi,field){
+    var el=$("imped_"+pi+"_"+field);
+    if(!el)return null;
+    var v=el.value.trim();
+    return v===""?null:v;
+  }
+  function edNum(pi,field){var v=edVal(pi,field);return v!==null?parseFloat(v):null;}
+  function edStr(pi,field){return edVal(pi,field)||null;}
 
   _importProposals.forEach(function(p,pi){
     var chk=$("impck"+pi);
@@ -3355,40 +3448,52 @@ function applyImportSelected(){
       pendingSales.push({type:"rv",asset:a,qsold:a.n,ppuNew:null,full:true});
       return;
     }
+
     if(p.isNew){
-      // Issue 3 — nuevo activo: usar broker y tipo de la instrucción si se puede
-      var userInstr=(gv("impInstr")||"");
-      var vi=Math.round(p.nNew*p.ppuNew*100)/100;
-      var newA={k:ticker,nm:item.nm||ticker,br:item.broker||"Importado",sec:"N/D",
-        n:p.nNew,ppc:p.ppuNew,va:vi,vi:vi,rc:0,dv:0,rt:0,rp:0,ca:0,d:1,bd:new Date().toISOString().slice(0,10),
+      // Leer valores editados
+      var editedTicker=(edStr(pi,"ticker")||ticker).toUpperCase();
+      var editedNm=edStr(pi,"nm")||editedTicker;
+      var editedNom=edNum(pi,"nom")||p.nNew||0;
+      var editedPpu=edNum(pi,"ppu")||p.ppuNew||0;
+      var editedCr=edNum(pi,"cr")||item.cr||1;
+      var editedBr=edStr(pi,"br")||item.broker||"IOL";
+      if(!editedNom||!editedPpu){log.push("&#9888; "+editedTicker+": datos incompletos, omitido");return;}
+      var vi=Math.round(editedNom*editedPpu*100)/100;
+      var newA={k:editedTicker,nm:editedNm,br:editedBr,sec:"N/D",
+        n:editedNom,ppc:editedPpu,va:vi,vi:vi,rc:0,dv:0,rt:0,rp:0,ca:0,d:1,
+        bd:new Date().toISOString().slice(0,10),
         pe:item.pe||null,pes:null,eps:item.eps||null,epss:null,
         beta:item.beta||1,dy:item.dy||0,tg:item.tg||null,
-        vl:"-",tipo:item.tipo_cedear||"CEDEAR",cr:item.cr||1,con:false,src:"M",
-        rec:{a:"hold",l:"NUEVO",t:"Importado desde captura."},ri:[],pp:[],ep:[],an:{sb:0,b:0,h:0,s:0}};
+        vl:"-",tipo:item.tipo_cedear||"CEDEAR",cr:editedCr,con:false,src:"M",
+        rec:{a:"hold",l:"NUEVO",t:"Importado desde captura."},
+        ri:[],pp:[],ep:[],an:{sb:0,b:0,h:0,s:0}};
       RV.push(newA);
-      log.push("&#43; "+ticker+": nuevo activo ("+p.nNew+" noms @ $"+p.ppuNew+")");
-      newBuys.push({ticker:ticker,cost:Math.round(p.nNew*p.ppuNew*100)/100});
+      log.push("&#43; "+editedTicker+": nuevo activo ("+editedNom+" noms @ $"+editedPpu+")");
+      newBuys.push({ticker:editedTicker,cost:Math.round(editedNom*editedPpu*100)/100});
       return;
     }
 
+    // Activo existente — leer campos editados
     var a=p.asset;
-    // Aplicar cambios de precio
     p.changes.forEach(function(c){
       if(c.field==="precio"){
+        var newPpu=edNum(pi,"ppu");
+        if(newPpu===null)newPpu=c.val;
         var ppuOld=a.n>0?Math.round(a.va/a.n*100)/100:0;
-        a.va=Math.round(a.n*c.val*100)/100;
+        a.va=Math.round(a.n*newPpu*100)/100;
         recalcRV(a);
-        log.push("&#10003; "+ticker+": precio $"+ppuOld+" → $"+c.val);
+        log.push("&#10003; "+ticker+": precio $"+ppuOld+" → $"+newPpu);
       }
-      if(c.field==="P/E"){a.pe=c.val;a.src="IMP";}
-      if(c.field==="EPS"){a.eps=c.val;}
-      if(c.field==="Beta"){a.beta=c.val;}
-      if(c.field==="Target"){a.tg=c.val;}
+      if(c.field==="P/E"){var v=edNum(pi,"pe");a.pe=v!==null?v:c.val;a.src="IMP";}
+      if(c.field==="EPS"){var v=edNum(pi,"eps");a.eps=v!==null?v:c.val;}
+      if(c.field==="Beta"){var v=edNum(pi,"beta");a.beta=v!==null?v:c.val;}
+      if(c.field==="Target"){var v=edNum(pi,"tg");a.tg=v!==null?v:c.val;}
       if(c.field==="nominales"){
-        var nNew=c.val;
+        var nNew=edNum(pi,"nom");
+        if(nNew===null)nNew=c.val;
         if(nNew>a.n){
           var addN=nNew-a.n;
-          var ppu=p.ppuNew;
+          var ppu=edNum(pi,"ppu")||p.ppuNew;
           a.ppc=Math.round((a.n*a.ppc+addN*ppu)/(nNew)*100)/100;
           a.d=Math.round((a.n*a.d+addN*1)/nNew);
           a.n=nNew;a.va=Math.round(nNew*ppu*100)/100;a.vi=Math.round(nNew*a.ppc*100)/100;
@@ -3396,7 +3501,7 @@ function applyImportSelected(){
           log.push("&#10003; "+ticker+": +"+addN+" noms comprados");
           newBuys.push({ticker:ticker,cost:Math.round(addN*ppu*100)/100});
         } else if(nNew<a.n){
-          pendingSales.push({type:"rv",asset:a,qsold:a.n-nNew,ppuNew:p.ppuNew,full:false});
+          pendingSales.push({type:"rv",asset:a,qsold:a.n-nNew,ppuNew:edNum(pi,"ppu")||p.ppuNew,full:false});
         }
       }
     });
@@ -3405,17 +3510,14 @@ function applyImportSelected(){
 
   closeImportPreview();
   reRV();refreshKPIs();
-  // Issue 3 — guardar INMEDIATAMENTE antes de procesar ventas
   saveToFirestore();
 
-  // Mostrar log
   if(res){
     res.innerHTML='<div style="color:var(--green);font-weight:600;margin-bottom:6px">Importación aplicada:</div>'
       +log.map(function(l){return '<div>'+l+'</div>';}).join("")
       +(pendingSales.length?'<div style="margin-top:8px;color:#f59e0b;font-weight:600">Ventas detectadas — confirmar precio:</div>':"");
   }
 
-  // Issue 4 — preguntar caja para nuevas compras
   newBuys.forEach(function(b){
     askTakeFromCash(b.cost,"compra "+b.ticker+" (importado)");
   });
