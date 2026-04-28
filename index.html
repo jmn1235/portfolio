@@ -1710,9 +1710,9 @@ function buildRVModal(a){
     +'<div id="bsFormEdit" class="bsform">'
     +'<div style="font-size:10px;color:var(--text3);margin:0 0 4px">Identificación</div>'
     +'<div class="egrid">'
-    +efl("ednm","Nombre del activo",a.nm||"")
-    +efl("edsec","Sector",a.sec||"")
-    +efl("edbr","Broker",a.br||"")
+    +eflt("ednm","Nombre del activo",a.nm||"")
+    +eflt("edsec","Sector",a.sec||"")
+    +eflt("edbr","Broker",a.br||"")
     +'</div>'
     +'<div style="font-size:10px;color:var(--text3);margin:8px 0 4px">Posición</div>'
     +'<div class="egrid">'
@@ -3104,6 +3104,7 @@ function openImportIA(){
     +'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px">'
     +'<span class="chip" onclick="setImpInstr(this)">Actualiza precios de todos los activos de esta captura</span>'
     +'<span class="chip" onclick="setImpInstr(this)">Toma la compra del activo que aparece y agregala a la cartera</span>'
+    +'<span class="chip" onclick="setImpInstr(this)">Es pantalla de IOL — extraer ticker del titulo, cantidad y ultimo precio</span>'
     +'<span class="chip" onclick="setImpInstr(this)">Solo actualiza ratios (P/E, EPS, Beta, Target) del activo visible</span>'
     +'<span class="chip" onclick="setImpInstr(this)">Detecta ventas realizadas comparando con la cartera actual</span>'
     +'<span class="chip" onclick="setImpInstr(this)">Es un resumen de cuenta, actualiza saldos y posiciones completas</span>'
@@ -3179,17 +3180,25 @@ function runImportIA(){
   res.innerHTML='<span style="color:var(--gold)">&#129504; Analizando '+_importImgs.length+' imagen(es)...</span>';
   var rvCtx=RV.map(function(a){return a.k+"(n="+a.n+",br="+a.br+")";}).join(", ");
   var userInstr=gv("impInstr");
-  var prompt="Analiza "+_importImgs.length+" imagen(es) de portfolios de inversiones argentinos.\n"
-    +"Activos en sistema (solo para referencia de formato): "+rvCtx+"\n\n"
-    +(userInstr?"INSTRUCCION ESPECIFICA DEL USUARIO: "+userInstr+"\n\n":"")
-    +"REGLAS CRITICAS — respeta estas reglas sin excepcion:\n"
-    +"1. SOLO incluye en 'activos' los tickers que aparecen VISUALMENTE en alguna imagen. NO uses los activos del sistema como fuente de datos — son solo referencia de formato.\n"
-    +"2. Si un ticker del sistema NO aparece en ninguna imagen, NO lo incluyas en el JSON bajo ningun concepto.\n"
-    +"3. Un activo esta vendido SOLO si estaba en el sistema Y NO aparece en NINGUNA imagen.\n"
-    +"4. Si la instruccion pide solo un activo especifico, devuelve solo ese activo.\n"
-    +"5. Si ves el mismo ticker en varias imagenes (distintos brokers), suma sus nominales.\n\n"
-    +"Responde SOLO con este JSON sin markdown:\n"
-    +"{\"activos\":[{\"ticker\":\"GGAL\",\"nominales\":210,\"ppu\":5.20,\"tipo\":\"RV\",\"broker\":\"Balanz\",\"pe\":7.5,\"eps\":1.1,\"beta\":1.5,\"tg\":60}],\"vendidos\":[{\"ticker\":\"X\"}]}";
+  var prompt="Sos un asistente que extrae datos de capturas de brokers argentinos (IOL, Balanz, etc).\n"
+    +"Activos en sistema (referencia de formato solamente, NO usar como fuente de datos): "+rvCtx+"\n\n"
+    +(userInstr?"INSTRUCCION DEL USUARIO: "+userInstr+"\n\n":"")
+    +"FORMATOS DE PANTALLAS ARGENTINAS que vas a encontrar:\n"
+    +"- IOL (Invertir Online): muestra 'Detalle de XLV', 'Cantidad: 380', 'Ultimo precio US$ 5,18', 'PPC US$ 5,21', 'Tu total valorizado US$ 1.968,40'\n"
+    +"- Balanz: muestra tabla con columnas Ticker, Cantidad, Precio, Valor total, etc.\n"
+    +"- Numeros en formato ARGENTINO: punto=separador miles, coma=decimal. Ej: '1.968,40' = 1968.40, '5,18' = 5.18\n"
+    +"- El ticker suele estar en el titulo 'Detalle de XLV' o en columna Ticker\n"
+    +"- 'Cantidad' o 'Tenencias' = nominales\n"
+    +"- 'Ultimo precio' o 'Precio actual' = ppu (precio por unidad en USD)\n"
+    +"- 'PPC' = precio promedio de compra (usar como ppc, NO como ppu)\n\n"
+    +"REGLAS CRITICAS:\n"
+    +"1. SOLO incluye tickers visibles en las imagenes. NUNCA inventes ni agregues activos que no ves.\n"
+    +"2. NO incluyas activos del sistema que no aparezcan en ninguna imagen.\n"
+    +"3. Convierte numeros argentinos correctamente: '1.968,40' → 1968.40, '5,18' → 5.18\n"
+    +"4. 'vendidos' solo si el activo estaba en el sistema Y no aparece en ninguna imagen.\n"
+    +"5. Si la instruccion pide solo un activo, devuelve solo ese.\n\n"
+    +"Responde SOLO con este JSON (sin markdown, sin texto extra):\n"
+    +"{\"activos\":[{\"ticker\":\"XLV\",\"nominales\":380,\"ppu\":5.18,\"tipo\":\"RV\",\"broker\":\"IOL\"}],\"vendidos\":[]}";
   var imgBlocks=_importImgs.map(function(img){
     var p=img.data.split(";base64,");
     return {type:"image",source:{type:"base64",media_type:p[0].replace("data:",""),data:p[1]}};
