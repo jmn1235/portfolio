@@ -2031,7 +2031,7 @@ function saveNewRV(){
     exist.va=Math.round(totN*ppu*100)/100;
     exist.vi=Math.round((exist.vi+addVI)*100)/100;
     recalcRV(exist);
-    reRV();refreshKPIs(); // Don't save yet - wait for user to confirm salescloseModal();return;
+    reRV();refreshKPIs();saveToFirestore();closeModal();return;
   }
   var va=Math.round(n*ppu*100)/100;
   var vi=Math.round(n*ppc*100)/100;
@@ -2050,7 +2050,7 @@ function saveNewRV(){
     vl:"-",con:false,src:"M",
     rec:{a:"hold",l:"NUEVO ACTIVO",t:"Ingresado manualmente. Actualizar ratios con Finnhub."},
     ri:[],pp:[],ep:[],an:{sb:0,b:0,h:0,s:0}});
-  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm salescloseModal();
+  reRV();refreshKPIs();saveToFirestore();closeModal();
 }
 
 function saveNewRF(){
