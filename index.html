@@ -3898,6 +3898,7 @@ function saveSnapshot(){
     SNAPSHOTS.sort(function(a,b){return new Date(a.ts)-new Date(b.ts);});
   }
   saveSnapshots();
+  saveToFirestore();
   renderTimeline();
   updateCashDisplay();
   var btn=event&&event.target;
@@ -3910,6 +3911,7 @@ function deleteLastSnapshot(){
   if(!confirm("Borrar snapshot del "+last.label+"?"))return;
   SNAPSHOTS.pop();
   saveSnapshots();
+  saveToFirestore();
   renderTimeline();
   updateCashDisplay();
 }
@@ -3919,6 +3921,7 @@ function clearSnapshots(){
   if(!confirm("Borrar todos los "+SNAPSHOTS.length+" snapshots? Esta accion no se puede deshacer."))return;
   SNAPSHOTS=[];
   saveSnapshots();
+  saveToFirestore();
   renderTimeline();
   updateCashDisplay();
 }
@@ -4496,7 +4499,9 @@ function deleteRealized(idx){
   if(!confirm("Eliminar esta operacion?\n"+r.k+" — P&L "+pnlStr+" ("+r.date+")\n\nEsto NO restaura el activo al portfolio. Solo elimina el registro del historial y su P&L del retorno total."))return;
   REALIZED.splice(idx,1);
   saveRealized();
+  saveToFirestore();
   refreshKPIs();
+  renderSummaryTable();
 }
 
 function editRealized(idx){
@@ -4555,7 +4560,9 @@ function saveEditRealized(){
   REALIZED[idx].pct=pct;
   REALIZED[idx].date=$("erDate").value.trim()||REALIZED[idx].date;
   saveRealized();
+  saveToFirestore();
   refreshKPIs();
+  renderSummaryTable();
   closeEditRealizedModal();
 }
 
@@ -4694,6 +4701,26 @@ function updateSyncStatus(status){
   var txt=labels[status];
   if(status==="syncing" && _pendingWrites>1) txt="sincronizando ("+_pendingWrites+" pend.)";
   ind.textContent="\u25cf "+txt;
+  // Visibilidad reforzada cuando hay actividad
+  if(status==="syncing"){
+    ind.style.background="rgba(245,158,11,.15)";
+    ind.style.padding="3px 8px";
+    ind.style.borderRadius="4px";
+    ind.style.fontWeight="600";
+    ind.style.fontSize="11px";
+  } else if(status==="error"){
+    ind.style.background="rgba(239,68,68,.15)";
+    ind.style.padding="3px 8px";
+    ind.style.borderRadius="4px";
+    ind.style.fontWeight="600";
+    ind.style.fontSize="11px";
+  } else {
+    ind.style.background="transparent";
+    ind.style.padding="0";
+    ind.style.borderRadius="0";
+    ind.style.fontWeight="normal";
+    ind.style.fontSize="10px";
+  }
 }
 
 // Limpia undefined para que Firestore no los rechace
@@ -4932,6 +4959,20 @@ function fbForceSave(){
   setTimeout(refreshFbDebug,2000);
 }
 
+function fbTestSync(){
+  if(!currentUser){alert("Necesitas estar logueado para probar el sync.");return;}
+  fbLog("🧪 Test de sync — disparando 3 writes seguidos...","#a78bfa");
+  fbLog("    Mira el indicador del header: deberia decir 'sincronizando (N pend.)' en amarillo.","#94a3b8");
+  fbLog("    Si recargas en este momento, el browser deberia avisarte.","#94a3b8");
+  saveToFirestore();
+  setTimeout(function(){saveToFirestore();},50);
+  setTimeout(function(){saveToFirestore();},100);
+  setTimeout(function(){
+    fbLog("Test completado. Pendientes ahora: "+_pendingWrites,_pendingWrites===0?"#10b981":"#f59e0b");
+    refreshFbDebug();
+  },3500);
+}
+
 // Interceptar updateSyncStatus para loguear en el panel
 var _origUpdateSync=null;
 setTimeout(function(){
@@ -5130,6 +5171,7 @@ setTimeout(function(){
       <button class="btn-save" onclick="fbTestRead()" style="font-size:11px">📖 Test Lectura</button>
       <button class="btn-save" onclick="fbTestWrite()" style="font-size:11px;background:rgba(99,102,241,.25);border-color:#818cf8;color:#818cf8">✏️ Test Escritura</button>
       <button class="btn-save" onclick="fbForceSave()" style="font-size:11px;background:rgba(16,185,129,.2);border-color:#10b981;color:#10b981">💾 Forzar guardado</button>
+      <button class="btn-save" onclick="fbTestSync()" style="font-size:11px;background:rgba(167,139,250,.2);border-color:#a78bfa;color:#a78bfa">🧪 Test sync (contador+aviso)</button>
       <button class="btn-save" onclick="refreshFbDebug()" style="font-size:11px;background:rgba(148,163,184,.1);border-color:#334155;color:#94a3b8">🔄 Actualizar estado</button>
     </div>
 
