@@ -387,8 +387,8 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
   <button class="tab" onclick="showTab('rv',this)">&#128200; Renta Variable</button>
   <button class="tab" onclick="showTab('rf',this)">&#127970; Renta Fija</button>
   <button class="tab" onclick="showTab('cr',this)">&#8383; Cripto</button>
-  <button class="tab" onclick="showTab('rk',this)">&#9878; Riesgo</button>
-  <button class="tab" onclick="showTab('rec',this)" style="color:var(--gold)">&#128161; Recomendaciones</button>
+  <button class="tab" onclick="showTab('rec',this)" style="color:var(--gold)">&#128202; Análisis Portfolio</button>
+  <button class="tab" onclick="showTab('ai',this)" style="color:#818cf8">&#129504; Consultor IA</button>
 </div>
 
 <div id="panel-ov" class="panel active">
@@ -495,8 +495,6 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
   <div class="upd-bar" style="flex-wrap:wrap;gap:8px">
     <button class="btn-blue" id="fhBtn" onclick="updateFinnhub()">&#128260; Actualizar con Finnhub</button>
     <button class="btn-blue" style="background:rgba(52,168,83,.2);border-color:#34a853;color:#34a853" onclick="openSheetsConfig()">&#128202; Google Sheets</button>
-    <button class="btn-blue" style="background:rgba(99,102,241,.25);border-color:#818cf8" onclick="regenAllRecs()">&#9889; Recalc. Recomendaciones</button>
-    <button class="btn-blue" style="background:rgba(245,158,11,.2);border-color:#f59e0b;color:#f59e0b" onclick="openAIAnalysis()">&#129504; Analisis IA</button>
     <button class="btn-ghost" onclick="clearStorage()" style="font-size:11px">&#8635; Resetear</button>
     <div style="flex:1;min-width:200px"><div class="upd-status" id="fhStatus">FH actualiza precios y ratios &middot; IA genera recomendaciones con Claude</div>
     <div id="sheetsStatus" style="font-size:10px;color:#34a853;margin-top:2px;display:none"></div>
@@ -604,40 +602,15 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
   </div>
 </div>
 
-<div id="panel-rk" class="panel">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
-    <div class="card"><div class="card-t">Clase de Activo</div>
-      <div class="pb-w"><div class="pb-l"><span>Renta Variable</span><span class="mono">38.3% $33,758</span></div><div class="pb"><div class="pbf" style="width:38.3%;background:var(--blue)"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Cripto</span><span class="mono">32.8% $28,935</span></div><div class="pb"><div class="pbf" style="width:32.8%;background:#f7931a"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Renta Fija + MM</span><span class="mono">29.0% $25,600</span></div><div class="pb"><div class="pbf" style="width:29%;background:var(--green)"></div></div></div>
-    </div>
-    <div class="card"><div class="card-t">Sector RV</div>
-      <div class="pb-w"><div class="pb-l"><span>Mineria Au/Cu/Li</span><span class="mono">~29%</span></div><div class="pb"><div class="pbf" style="width:29%;background:#fbbf24"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Energia E&amp;P ARG</span><span class="mono">~27%</span></div><div class="pb"><div class="pbf" style="width:27%;background:#f59e0b"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Tech / E-Commerce</span><span class="mono">~26%</span></div><div class="pb"><div class="pbf" style="width:26%;background:var(--blue)"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Bancos / Pagos</span><span class="mono">~12%</span></div><div class="pb"><div class="pbf" style="width:12%;background:#818cf8"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Defensivos (KO,QQQ)</span><span class="mono">~6%</span></div><div class="pb"><div class="pbf" style="width:6%;background:#34d399"></div></div></div>
-    </div>
-    <div class="card"><div class="card-t">Beta Ponderada RV &mdash; v6</div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:600;color:var(--gold);margin:6px 0">~1.05</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:9px">GOOGL 1.00&rarr;1.13 &middot; META 1.20&rarr;1.31. Beta subio de 0.92 a ~1.05.</div>
-      <table style="font-size:11px;width:100%">
-        <tr><td class="clru">Alta (&gt;1.2):</td><td class="mono clrn" style="text-align:right">GGAL(1.52) META(1.31) MELI(1.45)</td></tr>
-        <tr><td class="clru">Media:</td><td class="mono clru" style="text-align:right">GOOGL(1.13) SPGI(1.20)</td></tr>
-        <tr><td class="clru">Baja:</td><td class="mono clrp" style="text-align:right">KO(0.36) RIO(0.58) V(0.80)</td></tr>
-        <tr><td class="clru">Negativa:</td><td class="mono" style="text-align:right;color:#f7931a">VIST(-0.43) YPF(0.42)</td></tr>
-      </table>
-    </div>
-    <div class="card"><div class="card-t">Geografia RV</div>
-      <div class="pb-w"><div class="pb-l"><span>EE.UU./Global</span><span class="mono">~52%</span></div><div class="pb"><div class="pbf" style="width:52%;background:var(--blue)"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Argentina</span><span class="mono">~30%</span></div><div class="pb"><div class="pbf" style="width:30%;background:#f59e0b"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>China</span><span class="mono">~9%</span></div><div class="pb"><div class="pbf" style="width:9%;background:#a78bfa"></div></div></div>
-      <div class="pb-w"><div class="pb-l"><span>Otros (Chile, UK, AU)</span><span class="mono">~9%</span></div><div class="pb"><div class="pbf" style="width:9%;background:#34d399"></div></div></div>
-    </div>
-  </div>
-</div>
-
 <div id="panel-rec" class="panel">
+  <!-- Toolbar -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+    <button class="btn-blue" style="background:rgba(99,102,241,.25);border-color:#818cf8;color:#818cf8" onclick="regenAllRecs()">&#9889; Recalcular análisis</button>
+    <button class="btn-blue" style="background:rgba(245,158,11,.2);border-color:#f59e0b;color:#f59e0b" onclick="openAIAnalysis()">&#129504; Análisis IA completo</button>
+    <span id="recStatus" style="font-size:11px;color:var(--text3);margin-left:6px"></span>
+  </div>
+
+  <!-- Banner IA Recs -->
   <div id="aiRecBanner" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:9px;padding:12px;margin-bottom:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div style="color:#f59e0b;font-weight:700;font-size:13px">&#129504; Recomendaciones IA — <span id="aiRecDate"></span></div>
@@ -645,82 +618,111 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
     </div>
     <div id="aiRecTableWrap"></div>
   </div>
-  <div class="nota"><strong>&#9888; Disclaimer:</strong> Analisis con datos de stockanalysis.com Abr 2026. No es asesoramiento financiero. GOOGL AGREGAR &rarr; MANTENER (P/E 29.75x, en linea con sector 28x).</div>
+
+  <div class="nota"><strong>&#9888; Disclaimer:</strong> Análisis automático basado en datos actuales del portfolio. No es asesoramiento financiero. Presioná "Recalcular análisis" para actualizar.</div>
+
+  <!-- FORTALEZAS / DEBILIDADES -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:15px">
     <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:9px;padding:13px">
-      <div style="color:var(--green);font-weight:700;font-size:13px;margin-bottom:7px">Fortalezas</div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.9">&#9658; CAGR ~32% p.a. muy por encima S&amp;P500 (~12%)<br>&#9658; Sharpe ~1.08 &rarr; excelente retorno ajustado por riesgo<br>&#9658; ONs USD con TIRs 5-7% (Cresud, Pluspetrol, YPF)<br>&#9658; BTC a $40k, actual $72k (+80%)<br>&#9658; VIST: UBS target $86 (+34%), Vaca Muerta expansion</div>
+      <div style="color:var(--green);font-weight:700;font-size:13px;margin-bottom:7px">&#9650; Fortalezas</div>
+      <div id="recFortalezas" style="font-size:12px;color:var(--text2);line-height:1.9">Presioná "Recalcular análisis" para generar...</div>
     </div>
     <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:9px;padding:13px">
-      <div style="color:var(--red);font-weight:700;font-size:13px;margin-bottom:7px">Debilidades</div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.9">&#9658; Cripto 32.8% &mdash; ETH -36%, SOL -55%<br>&#9658; Argentina ~30% RV &mdash; riesgo soberano<br>&#9658; MELI: P/E 44x vs sector 35x, perdida -21%<br>&#9658; GOOGL P/E 29.75x en linea con sector, no barato<br>&#9658; JD+BABA: doble China con tension comercial</div>
-    </div>
-  </div>
-  <div class="tw"><table>
-    <thead><tr><th class="nosort">Activo</th><th class="nosort">Clase</th><th class="nosort">Accion</th><th class="nosort">P/E</th><th class="nosort">CAGR</th><th class="nosort">Razonamiento</th></tr></thead>
-    <tbody>
-      <tr style="background:rgba(239,68,68,.04)"><td class="fw">MELI</td><td><span class="bdg bb">LatAm</span></td><td><span class="bdg br">VENDER</span></td><td class="mono">44.2x</td><td class="mono clrn">-27.2%</td><td style="font-size:11px;color:var(--text2);white-space:normal">P/E 44x vs sector 35x. Perdida -21%. Beta 1.45.</td></tr>
-      <tr style="background:rgba(239,68,68,.04)"><td class="fw">JD</td><td><span class="bdg bb">China</span></td><td><span class="bdg br">VENDER</span></td><td class="mono">10x</td><td class="mono clrn">-14.2%</td><td style="font-size:11px;color:var(--text2);white-space:normal">Doble China con BABA. Redundante con BABA en cartera.</td></tr>
-      <tr style="background:rgba(239,68,68,.04)"><td class="fw">SOL</td><td><span class="bdg bp">Cripto</span></td><td><span class="bdg br">VENDER</span></td><td class="mono clru">N/D</td><td class="mono clrn">-74%</td><td style="font-size:11px;color:var(--text2);white-space:normal">-55% desde compra. Concentrar cripto en BTC.</td></tr>
-      <tr style="background:rgba(251,191,36,.03)"><td class="fw">B (Barrick)</td><td><span class="bdg by">Oro</span></td><td><span class="bdg by">REDUCIR 35%</span></td><td class="mono">14.9x</td><td class="mono clrp">82.6%</td><td style="font-size:11px;color:var(--text2);white-space:normal">+147% desde compra. Exceso en especulativos con Cripto.</td></tr>
-      <tr style="background:rgba(251,191,36,.03)"><td class="fw">ETH</td><td><span class="bdg bp">Cripto</span></td><td><span class="bdg by">REDUCIR 50%</span></td><td class="mono clru">N/D</td><td class="mono clrn">-46%</td><td style="font-size:11px;color:var(--text2);white-space:normal">Perdida -$925. Mantener WBETH (staking).</td></tr>
-      <tr style="background:rgba(251,191,36,.03)"><td class="fw">GOOGL</td><td><span class="bdg bb">Tech</span></td><td><span class="bdg bgr">MANTENER</span></td><td class="mono">29.75x</td><td class="mono clrp">126.3%</td><td style="font-size:11px;color:var(--text2);white-space:normal">P/E 29.75x en linea con sector 28x. EPS +34% YoY. Target $354.</td></tr>
-      <tr style="background:rgba(251,191,36,.03)"><td class="fw">GGAL</td><td><span class="bdg bb">Banco</span></td><td><span class="bdg bgr">MANTENER</span></td><td class="mono">7x</td><td class="mono clrp">+0.7%</td><td style="font-size:11px;color:var(--text2);white-space:normal">P/E 7x vs sector 12x. Target $59 (+22%). ROE 30.9%.</td></tr>
-      <tr style="background:rgba(251,191,36,.03)"><td class="fw">SPGI</td><td><span class="bdg bb">Datos</span></td><td><span class="bdg bgr">MANTENER</span></td><td class="mono">29.6x</td><td class="mono clrn">-12%</td><td style="font-size:11px;color:var(--text2);white-space:normal">Cayo -20% en 2026. Target $563 (+35%). 15 analistas Buy.</td></tr>
-      <tr style="background:rgba(16,185,129,.04)"><td class="fw">V (Visa)</td><td><span class="bdg bb">Pagos</span></td><td><span class="bdg bp">PROMEDIAR</span></td><td class="mono">28.5x</td><td class="mono clrn">-7.5%</td><td style="font-size:11px;color:var(--text2);white-space:normal">Target $397 (+31%). Beta 0.80. EPS $10.66 creciente.</td></tr>
-      <tr style="background:rgba(16,185,129,.04)"><td class="fw">CS48D/PLC5D</td><td><span class="bdg bg">ON USD</span></td><td><span class="bdg bp">REINVERTIR</span></td><td class="mono clru">-</td><td class="mono clrp">~9-11%</td><td style="font-size:11px;color:var(--text2);white-space:normal">Mayor TIR: 6-7% USD. Capital de MELI/JD/SOL aqui.</td></tr>
-    </tbody>
-  </table></div>
-  <div class="hr"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-    <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:9px;padding:13px">
-      <div style="color:var(--green);font-weight:700;margin-bottom:6px">Alcista</div>
-      <div style="font-size:20px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--green)">~$125,000</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">Oro sostenido, BTC &gt;$100k, VIST+GGAL +50%.</div>
-    </div>
-    <div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:9px;padding:13px">
-      <div style="color:#60a5fa;font-weight:700;margin-bottom:6px">Base</div>
-      <div style="font-size:20px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:#60a5fa">~$98,000</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">+11% en linea con mercado. RF reinvertida.</div>
-    </div>
-    <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:9px;padding:13px">
-      <div style="color:var(--red);font-weight:700;margin-bottom:6px">Bajista</div>
-      <div style="font-size:20px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--red)">~$70,000</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">Caida del oro, BTC -30%, stress ARG.</div>
+      <div style="color:var(--red);font-weight:700;font-size:13px;margin-bottom:7px">&#9660; Debilidades</div>
+      <div id="recDebilidades" style="font-size:12px;color:var(--text2);line-height:1.9">Presioná "Recalcular análisis" para generar...</div>
     </div>
   </div>
 
-  <!-- CHAT IA -->
-  <div style="margin-top:18px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-      <div style="font-weight:700;font-size:14px;color:var(--gold)">&#129504; Consultor IA — Preguntas sobre tu portfolio</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="text" id="chatApiKey" placeholder="API Key Anthropic (sk-ant-...)" style="font-size:11px;font-family:monospace;width:260px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:5px 10px">
-        <button class="btn-ghost" style="font-size:10px" onclick="clearChat()">&#128465; Limpiar</button>
-      </div>
+  <!-- TABLA ACCION POR ACTIVO -->
+  <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px">Acción por activo (calculado automáticamente)</div>
+  <div class="tw"><table id="recTabla">
+    <thead><tr>
+      <th class="nosort">Activo</th><th class="nosort">Clase</th><th class="nosort">Acción</th>
+      <th class="nosort">Ret%</th><th class="nosort">CAGR</th><th class="nosort">Razonamiento</th>
+    </tr></thead>
+    <tbody id="recTbody"></tbody>
+  </table></div>
+
+  <div class="hr"></div>
+
+  <!-- ESCENARIOS -->
+  <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Escenarios a 12 meses</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px">
+    <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:9px;padding:13px">
+      <div style="color:var(--green);font-weight:700;margin-bottom:6px">&#128200; Alcista</div>
+      <div id="escAlcista" style="font-size:20px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--green)">—</div>
+      <div id="escAlcistaDesc" style="font-size:11px;color:var(--text3);margin-top:4px">Recalcular para ver</div>
     </div>
-    <div class="chat-chips" id="chatChips">
-      <span class="chip" onclick="sendChip(this)">&#128200; Me conviene vender MELI y comprar GGAL?</span>
-      <span class="chip" onclick="sendChip(this)">&#9889; Recomendame un activo de alto riesgo y potencial</span>
-      <span class="chip" onclick="sendChip(this)">&#128176; Conviene comprar mas BTC ahora?</span>
-      <span class="chip" onclick="sendChip(this)">&#9878; Como esta el riesgo de mi cartera?</span>
-      <span class="chip" onclick="sendChip(this)">&#128203; Cual es mi activo con mejor perspectiva a largo plazo?</span>
-      <span class="chip" onclick="sendChip(this)">&#127970; Conviene agregar mas renta fija ahora?</span>
+    <div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:9px;padding:13px">
+      <div style="color:#60a5fa;font-weight:700;margin-bottom:6px">&#128203; Base</div>
+      <div id="escBase" style="font-size:20px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:#60a5fa">—</div>
+      <div id="escBaseDesc" style="font-size:11px;color:var(--text3);margin-top:4px">Recalcular para ver</div>
     </div>
-    <div class="chat-wrap">
-      <div class="chat-msgs" id="chatMsgs">
-        <div class="chat-msg ai">Hola! Soy tu consultor IA. Conozco toda tu cartera en detalle. Podés preguntarme cualquier cosa sobre inversiones, y también <strong>pegar o adjuntar imágenes</strong> (cotizaciones, gráficos, capturas de Balanz/IOL) junto con tu pregunta con Ctrl+V o el botón 📷. Usá las sugerencias de arriba o escribí lo que quieras.</div>
-      </div>
-      <div id="chatImgStrip" class="chat-img-strip"></div>
-      <div class="chat-input-row" style="align-items:flex-end">
-        <button class="chat-attach-btn" title="Adjuntar imagen (o pega con Ctrl+V)" onclick="$('chatImgFile').click()">&#128247;</button>
-        <input type="file" id="chatImgFile" accept="image/*" multiple style="display:none" onchange="chatAddImgFiles(this)">
-        <textarea class="chat-input" id="chatInput" placeholder="Preguntame sobre tu cartera... podés pegar una imagen con Ctrl+V" onkeydown="chatKeydown(event)" onpaste="chatHandlePaste(event)"></textarea>
-        <button class="chat-send" id="chatSendBtn" onclick="sendChat()">&#10148; Enviar</button>
-      </div>
+    <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:9px;padding:13px">
+      <div style="color:var(--red);font-weight:700;margin-bottom:6px">&#128201; Bajista</div>
+      <div id="escBajista" style="font-size:20px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--red)">—</div>
+      <div id="escBajistaDesc" style="font-size:11px;color:var(--text3);margin-top:4px">Recalcular para ver</div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- RIESGO (integrado) -->
+  <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">&#9878; Análisis de Riesgo</div>
+  <div id="riskWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+    <div class="card"><div class="card-t">Clase de Activo</div>
+      <div id="riskClase"><div style="font-size:11px;color:var(--text3)">Recalcular para ver...</div></div>
+    </div>
+    <div class="card"><div class="card-t">Sector RV</div>
+      <div id="riskSector"><div style="font-size:11px;color:var(--text3)">Recalcular para ver...</div></div>
+    </div>
+    <div class="card"><div class="card-t">Beta Ponderada RV</div>
+      <div id="riskBeta" style="font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:600;color:var(--gold);margin:6px 0">—</div>
+      <div id="riskBetaDetail" style="font-size:11px;color:var(--text3)">Recalcular para ver</div>
+    </div>
+    <div class="card"><div class="card-t">Geografía RV</div>
+      <div id="riskGeo"><div style="font-size:11px;color:var(--text3)">Recalcular para ver...</div></div>
     </div>
   </div>
 </div>
+
+<!-- PESTAÑA: Consultor IA -->
+<div id="panel-ai" class="panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-weight:700;font-size:16px;color:#818cf8">&#129504; Consultor IA</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">Conoce tu portfolio completo en tiempo real. Podés adjuntar imágenes de cotizaciones.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="chatApiKey" placeholder="API Key Anthropic (sk-ant-...)" style="font-size:11px;font-family:monospace;width:260px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:5px 10px">
+      <button class="btn-ghost" style="font-size:10px" onclick="clearChat()">&#128465; Limpiar</button>
+    </div>
+  </div>
+  <div id="aiCtxBadge" style="background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.25);border-radius:7px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#a5b4fc">
+    &#128203; El consultor tiene acceso en tiempo real a tu portfolio. Cargando contexto...
+  </div>
+  <div class="chat-chips" id="chatChips">
+    <span class="chip" onclick="sendChip(this)">&#128200; Me conviene vender MELI y comprar GGAL?</span>
+    <span class="chip" onclick="sendChip(this)">&#9889; Recomendame un activo de alto riesgo y potencial</span>
+    <span class="chip" onclick="sendChip(this)">&#128176; Conviene comprar mas BTC ahora?</span>
+    <span class="chip" onclick="sendChip(this)">&#9878; Como esta el riesgo de mi cartera?</span>
+    <span class="chip" onclick="sendChip(this)">&#128203; Cual es mi activo con mejor perspectiva a largo plazo?</span>
+    <span class="chip" onclick="sendChip(this)">&#127970; Conviene agregar mas renta fija ahora?</span>
+  </div>
+  <div class="chat-wrap">
+    <div class="chat-msgs" id="chatMsgs">
+      <div class="chat-msg ai">Hola! Soy tu consultor IA. Conozco tu cartera completa en tiempo real — todos tus activos, valores actuales, retornos y recomendaciones. Podés preguntarme cualquier cosa y también <strong>pegar o adjuntar imágenes</strong> con Ctrl+V o el botón 📷.</div>
+    </div>
+    <div id="chatImgStrip" class="chat-img-strip"></div>
+    <div class="chat-input-row" style="align-items:flex-end">
+      <button class="chat-attach-btn" title="Adjuntar imagen (o pega con Ctrl+V)" onclick="$('chatImgFile').click()">&#128247;</button>
+      <input type="file" id="chatImgFile" accept="image/*" multiple style="display:none" onchange="chatAddImgFiles(this)">
+      <textarea class="chat-input" id="chatInput" placeholder="Preguntame sobre tu cartera..." onkeydown="chatKeydown(event)" onpaste="chatHandlePaste(event)"></textarea>
+      <button class="chat-send" id="chatSendBtn" onclick="sendChat()">&#10148; Enviar</button>
+    </div>
+  </div>
+</div>
+
 
 <div class="mo" id="modalOverlay" onclick="modalBgClick(event)">
   <div class="mbox" id="modalBox">
@@ -978,14 +980,28 @@ function gn(id){return parseFloat(gv(id));}
 function showTab(id,btn){
   document.querySelectorAll(".panel").forEach(function(p){p.classList.remove("active");});
   document.querySelectorAll(".tab").forEach(function(t){t.classList.remove("active");});
-  $("panel-"+id).classList.add("active");
+  var p=$("panel-"+id);
+  if(p)p.classList.add("active");
   if(btn)btn.classList.add("active");
-  // Pre-fill chat key from saved key
-  if(id==="rec"){
+  // Pre-fill API key for both chat tabs
+  if(id==="ai"||id==="rec"){
     var inp=$("chatApiKey");
     var saved=localStorage.getItem("anthApiKey")||"";
     if(inp&&!inp.value&&saved)inp.value=saved;
   }
+  // Update context badge when entering Consultor IA
+  if(id==="ai"){
+    var badge=$("aiCtxBadge");
+    if(badge){
+      var rvN=RV.length,rfN=RF.length,crN=CR.length;
+      var tot=RV.reduce(function(s,a){return s+(a.va||0);},0)
+               +RF.reduce(function(s,b){return s+(b.va||0);},0)
+               +CR.reduce(function(s,c){return s+(c.va||0);},0);
+      badge.innerHTML='&#128203; Portfolio cargado: <b>'+rvN+' RV &middot; '+rfN+' RF &middot; '+crN+' Cripto</b> &nbsp;|&nbsp; Total: <b>$'+Math.round(tot).toLocaleString()+'</b> &nbsp;|&nbsp; <span style="color:#34d399">&#10003; Contexto activo en tiempo real</span>';
+    }
+  }
+  // Auto-render rec table when entering Analysis tab
+  if(id==="rec")renderRecTable();
 }
 
 // ================================================================
@@ -1056,8 +1072,8 @@ function buildRVRow(a){
              a.tipo==="CEDEAR-ETF"?'<span class="btag" style="background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid #d97706;font-size:8px">ETF-CDR</span>':
              a.tipo==="ADR"?'<span class="btag" style="background:rgba(59,130,246,.2);color:#60a5fa;border:1px solid #3b82f6;font-size:8px">ADR</span>':
              '<span class="btag" style="background:rgba(16,185,129,.15);color:#34d399;border:1px solid #059669;font-size:8px">ARG</span>';
-  var onclick='onclick="openModal(\x27rv\x27,\x27'+a.k+'\x27)"';
-  var delbtn='<button class="btn-del" onclick="event.stopPropagation();deleteAsset(\x27rv\x27,\x27'+a.k+'\x27)" title="Eliminar">&#128465;</button>';
+  var onclick='onclick="openModal(\'rv\',this.dataset.key)" data-key="'+a.k+'"';
+  var delbtn='<button class="btn-del" onclick="event.stopPropagation();deleteAsset(\'rv\',\''+a.k.replace(/'/g,"\\'")+'\')" title="Eliminar">&#128465;</button>';
   return "<tr "+onclick+">"
     +"<td class=\"fw\" data-val=\""+a.k+"\">"+a.k+star+"</td>"
     +"<td data-val=\""+a.nm+"\" style=\"color:var(--text2);font-size:11px\">"+(a.nm.length>22?a.nm.slice(0,22)+"...":a.nm)+"</td>"
@@ -1129,7 +1145,7 @@ function buildRFRow(b){
     ?"<span class=\"bdg by\" style=\"font-size:9px\">ARS</span>"
     :"<span class=\"bdg bb\" style=\"font-size:9px\">USD</span>";
   var tv=b.ti!=null?b.ti:-99999;
-  var onclick='onclick="openModal(\x27rf\x27,\x27'+b.k+'\x27)"';
+  var onclick='onclick="openModal(\'rf\',this.dataset.key)" data-key="'+b.k+'"';
   var delbtn='<button class="btn-del" onclick="event.stopPropagation();deleteAsset(\x27rf\x27,\x27'+b.k+'\x27)" title="Eliminar">&#128465;</button>';
   return "<tr "+onclick+">"
     +"<td class=\"fw\" data-val=\""+b.k+"\">"+b.k+"</td>"
@@ -1184,7 +1200,7 @@ function buildCRRow(c){
   var cpd=c.cp?"$"+c.cp.toLocaleString():"staking";
   var cav=c.cp||c.pa;
   var cad=c.ca!=null?(c.ca>=0?"+":"")+c.ca+"%":"N/D";
-  var onclick='onclick="openModal(\x27cr\x27,\x27'+c.k+'\x27)"';
+  var onclick='onclick="openModal(\'cr\',this.dataset.key)" data-key="'+c.k+'"';
   var delbtn='<button class="btn-del" onclick="event.stopPropagation();deleteAsset(\x27cr\x27,\x27'+c.k+'\x27)" title="Eliminar">&#128465;</button>';
   return "<tr "+onclick+">"
     +"<td class=\"fw\" data-val=\""+c.k+"\" style=\"color:"+col+"\">"+c.k+"</td>"
@@ -2931,14 +2947,137 @@ function autoRec(a){
   return {a:act,l:lbl,t:txt+" [Auto]",ri:a.rec?a.rec.ri:[]};
 }
 
+function renderRecTable(){
+  var tbody=$("recTbody");if(!tbody)return;
+  var allAssets=[];
+  RV.forEach(function(a){if(a.rec)allAssets.push({k:a.k,tipo:"RV",sec:a.sec||"",rec:a.rec,rp:a.rp,ca:a.ca,pe:a.pe});});
+  CR.forEach(function(c){if(c.rec)allAssets.push({k:c.k,tipo:"Cripto",sec:"Cripto",rec:{a:c.rec,l:c.rec.toUpperCase(),t:""},rp:c.rp,ca:c.ca,pe:null});});
+  var order={sell:0,reduce:1,hold:2,reinvest:3,buy:4};
+  allAssets.sort(function(a,b){return (order[a.rec.a]||5)-(order[b.rec.a]||5);});
+  var bgMap={sell:"rgba(239,68,68,.05)",reduce:"rgba(251,191,36,.04)",hold:"rgba(251,191,36,.03)",buy:"rgba(16,185,129,.04)",reinvest:"rgba(16,185,129,.04)"};
+  var bdgMap={sell:'<span class="bdg br">VENDER</span>',reduce:'<span class="bdg by">REDUCIR</span>',hold:'<span class="bdg bgr">MANTENER</span>',buy:'<span class="bdg bp">COMPRAR</span>',reinvest:'<span class="bdg bp">REINVERTIR</span>'};
+  tbody.innerHTML=allAssets.map(function(a){
+    var bg=bgMap[a.rec.a]||"";
+    var bdg=bdgMap[a.rec.a]||('<span class="bdg bgr">'+a.rec.l+'</span>');
+    var retC=a.rp>=0?" clrp":" clrn";
+    var caC=a.ca>=0?" clrp":" clrn";
+    return '<tr style="background:'+bg+';border-bottom:0.5px solid var(--border)">'
+      +'<td class="fw">'+a.k+'</td>'
+      +'<td><span class="bdg bgr" style="font-size:9px">'+a.tipo+'</span></td>'
+      +'<td>'+bdg+'</td>'
+      +'<td class="mono'+retC+'">'+(a.rp>=0?"+":"")+a.rp+'%</td>'
+      +'<td class="mono'+caC+'">'+(a.ca>=0?"+":"")+a.ca+'%</td>'
+      +'<td style="font-size:11px;color:var(--text2);white-space:normal;max-width:260px">'+(a.rec.t||"—")+'</td>'
+      +'</tr>';
+  }).join("");
+}
+
 function regenAllRecs(){
+  var st=$("recStatus");
+  if(st)st.textContent="Recalculando...";
+
+  // 1. Regenear recomendaciones por activo
   var count=0;
+  RV.forEach(function(a){if(!a.recManual){a.rec=autoRec(a);count++;}});
+  reRV();refreshKPIs();saveToFirestore();
+
+  // 2. Actualizar tabla de acciones
+  renderRecTable();
+
+  // 3. Fortalezas y debilidades dinámicas basadas en datos reales
+  var rvTot=RV.reduce(function(s,a){return s+(a.va||0);},0);
+  var rfTot=RF.reduce(function(s,b){return s+(b.va||0);},0);
+  var crTot=CR.reduce(function(s,c){return s+(c.va||0);},0);
+  var tot=rvTot+rfTot+crTot;
+
+  var topCAGR=RV.filter(function(a){return a.ca>20;}).sort(function(a,b){return b.ca-a.ca;}).slice(0,3);
+  var losers=RV.filter(function(a){return a.rp<-10;}).sort(function(a,b){return a.rp-b.rp;}).slice(0,3);
+  var betaP=RV.reduce(function(s,a){return s+(a.beta||1)*(a.va||0);},0)/(rvTot||1);
+  var divYield=RV.filter(function(a){return a.dy>0;});
+
+  var forts=[];
+  if(topCAGR.length)forts.push("&#9658; Alto CAGR: "+topCAGR.map(function(a){return a.k+" (+"+a.ca+"%)";}).join(", "));
+  if(rfTot>0)forts.push("&#9658; Renta Fija $"+Math.round(rfTot).toLocaleString()+" como ancla ("+Math.round(rfTot/tot*100)+"%)");
+  if(divYield.length)forts.push("&#9658; Div. yield en: "+divYield.map(function(a){return a.k+"("+a.dy+"%)";}).join(", "));
+  if(betaP<1)forts.push("&#9658; Beta ponderada conservadora: "+betaP.toFixed(2));
+  if(crTot>0)forts.push("&#9658; Exposición cripto: $"+Math.round(crTot).toLocaleString()+" ("+Math.round(crTot/tot*100)+"%)");
+  if(!forts.length)forts.push("&#9658; Portfolio balanceado entre clases de activos");
+
+  var debs=[];
+  if(losers.length)debs.push("&#9658; En pérdida: "+losers.map(function(a){return a.k+"("+a.rp+"%)";}).join(", "));
+  if(betaP>1.1)debs.push("&#9658; Beta alta: "+betaP.toFixed(2)+" — alta volatilidad relativa al mercado");
+  var sellRV=RV.filter(function(a){return a.rec&&a.rec.a==="sell";});
+  if(sellRV.length)debs.push("&#9658; Activos con señal VENDER: "+sellRV.map(function(a){return a.k;}).join(", "));
+  if(crTot/tot>0.3)debs.push("&#9658; Cripto "+Math.round(crTot/tot*100)+"% del total — alta concentración especulativa");
+  if(!debs.length)debs.push("&#9658; Sin debilidades críticas detectadas actualmente");
+
+  var fortEl=$("recFortalezas");if(fortEl)fortEl.innerHTML=forts.join("<br>");
+  var debEl=$("recDebilidades");if(debEl)debEl.innerHTML=debs.join("<br>");
+
+  // 4. Escenarios (calculados sobre valor total actual)
+  var alcPct=1.28, basePct=1.11, bajPct=0.82;
+  var esc=$("escAlcista");if(esc)esc.textContent="~$"+Math.round(tot*alcPct).toLocaleString();
+  var escD=$("escAlcistaDesc");if(escD)escD.textContent="+28%: mercado alcista, BTC fuerte, ARG estable";
+  var escB=$("escBase");if(escB)escB.textContent="~$"+Math.round(tot*basePct).toLocaleString();
+  var escBD=$("escBaseDesc");if(escBD)escBD.textContent="+11%: escenario en línea con mercado";
+  var escBj=$("escBajista");if(escBj)escBj.textContent="~$"+Math.round(tot*bajPct).toLocaleString();
+  var escBjD=$("escBajistaDesc");if(escBjD)escBjD.textContent="-18%: corrección cripto, stress ARG, caída tech";
+
+  // 5. RIESGO — Clases de activo
+  function pbRow(label,val,pct,color){
+    return '<div class="pb-w"><div class="pb-l"><span>'+label+'</span><span class="mono">'+pct+'% $'+Math.round(val).toLocaleString()+'</span></div>'
+      +'<div class="pb"><div class="pbf" style="width:'+Math.min(pct,100)+'%;background:'+color+'"></div></div></div>';
+  }
+  var rClaseEl=$("riskClase");
+  if(rClaseEl&&tot>0){
+    var rvP=Math.round(rvTot/tot*100),rfP=Math.round(rfTot/tot*100),crP=Math.round(crTot/tot*100);
+    rClaseEl.innerHTML=pbRow("Renta Variable",rvTot,rvP,"var(--blue)")
+      +pbRow("Cripto",crTot,crP,"#f7931a")
+      +pbRow("Renta Fija",rfTot,rfP,"var(--green)");
+  }
+
+  // 6. RIESGO — Sector RV
+  var secMap={};
+  RV.forEach(function(a){var s=a.sec||"Otro";secMap[s]=(secMap[s]||0)+(a.va||0);});
+  var secArr=Object.keys(secMap).map(function(s){return {s:s,v:secMap[s]};}).sort(function(a,b){return b.v-a.v;});
+  var secColors=["#fbbf24","#f59e0b","var(--blue)","#818cf8","#34d399","#60a5fa","#f87171"];
+  var rSecEl=$("riskSector");
+  if(rSecEl&&rvTot>0){
+    rSecEl.innerHTML=secArr.slice(0,6).map(function(s,i){
+      return pbRow(s.s,s.v,Math.round(s.v/rvTot*100),secColors[i%secColors.length]);
+    }).join("");
+  }
+
+  // 7. RIESGO — Beta ponderada
+  var betaEl=$("riskBeta");if(betaEl)betaEl.textContent="~"+betaP.toFixed(2);
+  var betaDet=$("riskBetaDetail");
+  if(betaDet){
+    var highB=RV.filter(function(a){return (a.beta||0)>1.2;}).map(function(a){return a.k+"("+a.beta+")";});
+    var lowB=RV.filter(function(a){return (a.beta||0)>0&&(a.beta||0)<0.8;}).map(function(a){return a.k+"("+a.beta+")";});
+    betaDet.innerHTML=(highB.length?"Alta (>1.2): "+highB.join(", ")+"<br>":"")
+      +(lowB.length?"Baja (<0.8): "+lowB.join(", "):"");
+  }
+
+  // 8. RIESGO — Geografía (por tipo/ticker)
+  var geoMap={"EE.UU./Global":0,"Argentina":0,"China":0,"Otros":0};
+  var arTickers=["GGAL","YPF","VIST"];
+  var cnTickers=["BABA","JD"];
   RV.forEach(function(a){
-    if(!a.recManual){a.rec=autoRec(a);count++;}
+    if(arTickers.indexOf(a.k)>=0)geoMap["Argentina"]+=(a.va||0);
+    else if(cnTickers.indexOf(a.k)>=0)geoMap["China"]+=(a.va||0);
+    else if(a.tipo==="ARG")geoMap["Argentina"]+=(a.va||0);
+    else geoMap["EE.UU./Global"]+=(a.va||0);
   });
-  reRV();refreshKPIs(); // Don't save yet - wait for user to confirm sales
-  var st=$("fhStatus");
-  if(st){st.className="upd-status ok";st.textContent=count+" recomendaciones recalculadas automaticamente.";}
+  var geoColors={"EE.UU./Global":"var(--blue)","Argentina":"#f59e0b","China":"#a78bfa","Otros":"#34d399"};
+  var rGeoEl=$("riskGeo");
+  if(rGeoEl&&rvTot>0){
+    rGeoEl.innerHTML=Object.keys(geoMap).filter(function(g){return geoMap[g]>0;}).map(function(g){
+      return pbRow(g,geoMap[g],Math.round(geoMap[g]/rvTot*100),geoColors[g]);
+    }).join("");
+  }
+
+  // Status
+  if(st){st.textContent="✓ Análisis actualizado — "+new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});}
 }
 
 // ================================================================
