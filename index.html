@@ -454,7 +454,10 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
         <button class="btn-ghost" style="font-size:10px;padding:3px 8px;color:#ef4444;border-color:#ef4444" onclick="clearSnapshots()">Limpiar todo</button>
       </div>
     </div>
+    <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Valores absolutos (USD)</div>
     <div style="position:relative;height:220px"><canvas id="cTimeline"></canvas></div>
+    <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 4px">Retorno % sobre capital invertido (igual que tabla resumen)</div>
+    <div style="position:relative;height:220px"><canvas id="cTimelinePct"></canvas></div>
     <div id="timelineEmpty" style="text-align:center;padding:40px;color:var(--text3);font-size:12px;display:none">
       Todavia no hay snapshots. Usa el boton <strong style="color:var(--gold)">&#128247; Guardar snapshot</strong> para registrar el estado actual del portfolio.
     </div>
@@ -1071,6 +1074,7 @@ function buildRVRow(a){
   var tipoBdg=a.tipo==="CEDEAR"?'<span class="btag" style="background:rgba(139,92,246,.25);color:#a78bfa;border:1px solid #7c3aed;font-size:8px">CEDEAR</span>':
              a.tipo==="CEDEAR-ETF"?'<span class="btag" style="background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid #d97706;font-size:8px">ETF-CDR</span>':
              a.tipo==="ADR"?'<span class="btag" style="background:rgba(59,130,246,.2);color:#60a5fa;border:1px solid #3b82f6;font-size:8px">ADR</span>':
+             a.tipo==="USA"?'<span class="btag" style="background:rgba(239,68,68,.2);color:#f87171;border:1px solid #ef4444;font-size:8px">USA</span>':
              '<span class="btag" style="background:rgba(16,185,129,.15);color:#34d399;border:1px solid #059669;font-size:8px">ARG</span>';
   var onclick='onclick="openModal(\'rv\',this.dataset.key)" data-key="'+a.k+'"';
   var delbtn='<button class="btn-del" onclick="event.stopPropagation();deleteAsset(\'rv\',\''+a.k.replace(/'/g,"\\'")+'\')" title="Eliminar">&#128465;</button>';
@@ -1550,7 +1554,28 @@ function updateVaCalc(){
 
 function saveRVEdit(key){
   var a=RV.find(function(x){return x.k===key;});if(!a)return;
-  // Identificacion
+  // Identificacion — incluyendo posible cambio de ticker
+  var newK=(gv("edk")||"").toUpperCase().trim();
+  if(newK && newK!==a.k){
+    // Validar formato basico (letras, numeros, punto, guion)
+    if(!/^[A-Z0-9.\-]+$/.test(newK)){
+      alert("Ticker invalido. Solo letras, numeros, punto y guion.");return;
+    }
+    // Validar que no exista otro activo con esa key
+    if(RV.find(function(x){return x.k===newK;})){
+      alert("Ya existe un activo con el ticker "+newK+". Elegi otro o consolida manualmente.");return;
+    }
+    var oldK=a.k;
+    a.k=newK;
+    // Migrar entradas de REALIZED que apuntaban al ticker viejo (mantener trazabilidad)
+    var migrados=0;
+    REALIZED.forEach(function(r){
+      if(r.k===oldK && r.type==="RV"){r.k=newK;migrados++;}
+    });
+    if(migrados>0)saveRealized();
+    // El parametro key recibido por la funcion ya no sirve para el resto del flujo
+    key=newK;
+  }
   var nm=gv("ednm"),sec=gv("edsec"),br=gv("edbr");
   if(nm&&nm.trim())a.nm=nm.trim();
   if(sec&&sec.trim())a.sec=sec.trim();
@@ -1562,9 +1587,13 @@ function saveRVEdit(key){
   if(!isNaN(ppc)&&ppc>0)a.ppc=ppc;
   if(!isNaN(dv))a.dv=dv;
   if(!isNaN(d)&&d>0)a.d=d;
-  var cr=gn("edcr"),tipo=gv("edtipo");
+  var cr=gn("edcr"),tipo=(gv("edtipo")||"").toUpperCase().trim();
   if(!isNaN(cr)&&cr>0)a.cr=cr;
-  if(tipo)a.tipo=tipo;
+  if(tipo){
+    var validTipos=["CEDEAR","CEDEAR-ETF","ADR","ARG","USA"];
+    if(validTipos.indexOf(tipo)>=0)a.tipo=tipo;
+    else alert("Tipo \""+tipo+"\" no reconocido. Valores validos: "+validTipos.join(", ")+". Se mantiene el anterior.");
+  }
   var pe=gn("edpe"),eps=gn("edeps"),beta=gn("edbeta"),dy=gn("eddy"),tg=gn("edtg");
   if(!isNaN(pe)){a.pe=pe;a.src="M";}
   if(!isNaN(eps)){a.eps=eps;a.src="M";}
@@ -1746,6 +1775,7 @@ function buildRVModal(a){
     +'<div id="bsFormEdit" class="bsform">'
     +'<div style="font-size:10px;color:var(--text3);margin:0 0 4px">Identificación</div>'
     +'<div class="egrid">'
+    +eflt("edk","Ticker",a.k||"")
     +eflt("ednm","Nombre del activo",a.nm||"")
     +eflt("edsec","Sector",a.sec||"")
     +eflt("edbr","Broker",a.br||"")
@@ -1762,7 +1792,7 @@ function buildRVModal(a){
     +'<div style="font-size:10px;color:var(--text3);margin:8px 0 4px">Ratio CEDEAR y tipo</div>'
     +'<div class="egrid">'
     +efl("edcr","Ratio CEDEAR (CDR/accion)",a.cr||1)
-    +eflt("edtipo","Tipo (CEDEAR/ADR/ARG/CEDEAR-ETF)",a.tipo||"CEDEAR")
+    +eflt("edtipo","Tipo (CEDEAR/ADR/ARG/CEDEAR-ETF/USA)",a.tipo||"CEDEAR")
     +'</div>'
     +'<div style="font-size:10px;color:var(--text3);margin:8px 0 4px">Ratios fundamentales</div>'
     +'<div class="egrid">'
@@ -1964,6 +1994,8 @@ function openAddModal(type){
       +f("nm","Nombre","ej. Apple Inc.")
       +f("br","Broker","Balanz / IOL")
       +f("sec","Sector","ej. Big Tech")
+      +f("tipo","Tipo (CEDEAR/ADR/ARG/CEDEAR-ETF/USA)","CEDEAR")
+      +f("cr","Ratio CEDEAR (CDR/accion)","1","number")
       +f("n","Nominales *","210","number")
       +f("ppc","PPC compra $ *","5.02","number")
       +f("ppu","Precio actual/u $ *","5.10","number")
@@ -2042,7 +2074,12 @@ function saveNewRV(){
   var ca=d>0&&vi>0?Math.round((Math.pow(va/vi,365/d)-1)*1000)/10:0;
   var pe=gn("naddpe"),pes=gn("naddpes"),eps=gn("naddeps"),epss=gn("naddepss");
   var beta=gn("naddbeta"),dy=gn("nadddy"),tg=gn("naddtg");
+  var tipoNuevo=(gv("naddtipo")||"CEDEAR").toUpperCase().trim();
+  var validTipos=["CEDEAR","CEDEAR-ETF","ADR","ARG","USA"];
+  if(validTipos.indexOf(tipoNuevo)===-1)tipoNuevo="CEDEAR";
+  var crNuevo=gn("naddcr");if(isNaN(crNuevo)||crNuevo<=0)crNuevo=1;
   RV.push({k:k,nm:gv("naddnm")||k,br:gv("naddbr")||"Manual",sec:gv("naddsec")||"N/D",
+    tipo:tipoNuevo,cr:crNuevo,
     n:n,ppc:ppc,va:va,vi:vi,rc:rc,dv:dv,rt:rt,rp:rp,ca:ca,d:d,
     pe:isNaN(pe)?null:pe,pes:isNaN(pes)?null:pes,
     eps:isNaN(eps)?null:eps,epss:isNaN(epss)?null:epss,
@@ -3752,11 +3789,34 @@ function saveSnapshots(){
   try{localStorage.setItem("v6snaps",JSON.stringify(SNAPSHOTS));}catch(e){}
 }
 
+// Calcula los % de retorno por clase y total, usando exactamente las mismas
+// formulas que renderSummaryTable() (rt/vi*100 por clase, (open+rlzd)/vi*100 total).
+// Devuelve null si vi=0 (evita Infinity/NaN; el chart mostrara gap).
+function _calcSnapshotPcts(){
+  var rvVi=RV.reduce(function(s,a){return s+a.vi;},0);
+  var rvRt=RV.reduce(function(s,a){return s+a.rt;},0);
+  var rfVi=RF.reduce(function(s,b){return s+b.vi;},0);
+  var rfRt=RF.reduce(function(s,b){return s+b.rt;},0);
+  var crVi=CR.filter(function(c){return c.cp;}).reduce(function(s,c){return s+c.vi;},0);
+  var crRt=CR.reduce(function(s,c){return s+c.re;},0);
+  var totVi=rvVi+rfVi+crVi;
+  var totOpen=rvRt+rfRt+crRt;
+  var totRlzd=REALIZED.reduce(function(s,r){return s+(r.pnl||0);},0);
+  var totGlobal=totOpen+totRlzd;
+  return {
+    totalPct: totVi>0 ? Math.round(totGlobal/totVi*1000)/10 : null,
+    rvPct: rvVi>0 ? Math.round(rvRt/rvVi*1000)/10 : null,
+    rfPct: rfVi>0 ? Math.round(rfRt/rfVi*1000)/10 : null,
+    crPct: crVi>0 ? Math.round(crRt/crVi*1000)/10 : null
+  };
+}
+
 function saveSnapshot(){
   var rvVa=RV.reduce(function(s,a){return s+a.va;},0);
   var rfVa=RF.reduce(function(s,b){return s+b.va;},0);
   var crVa=CR.reduce(function(s,c){return s+c.va;},0);
   var total=Math.round(rvVa+rfVa+crVa);
+  var pcts=_calcSnapshotPcts();
   var now=new Date();
   var label=now.toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"2-digit"});
   // Avoid duplicate same-day snapshot (update instead)
@@ -3767,9 +3827,15 @@ function saveSnapshot(){
     existing.rv=Math.round(rvVa);
     existing.rf=Math.round(rfVa);
     existing.cr=Math.round(crVa);
+    existing.totalPct=pcts.totalPct;
+    existing.rvPct=pcts.rvPct;
+    existing.rfPct=pcts.rfPct;
+    existing.crPct=pcts.crPct;
     existing.ts=now.toISOString();
   } else {
-    SNAPSHOTS.push({label:label,total:total,rv:Math.round(rvVa),rf:Math.round(rfVa),cr:Math.round(crVa),ts:now.toISOString()});
+    SNAPSHOTS.push({label:label,total:total,rv:Math.round(rvVa),rf:Math.round(rfVa),cr:Math.round(crVa),
+      totalPct:pcts.totalPct,rvPct:pcts.rvPct,rfPct:pcts.rfPct,crPct:pcts.crPct,
+      ts:now.toISOString()});
     SNAPSHOTS.sort(function(a,b){return new Date(a.ts)-new Date(b.ts);});
   }
   saveSnapshots();
@@ -3799,20 +3865,33 @@ function clearSnapshots(){
 }
 
 var _timelineChart=null;
+var _timelinePctChart=null;
+// Lee los % de retorno almacenados en cada snapshot. Devuelve null si el snapshot
+// es viejo y no tiene el campo (gap en el chart).
+function _pctSeries(field){
+  return SNAPSHOTS.map(function(s){
+    var v=s[field];
+    return (v==null || isNaN(v)) ? null : v;
+  });
+}
 function renderTimeline(){
   var cnt=$("snapshotCount");
   var empty=$("timelineEmpty");
   var cv=$("cTimeline");
+  var cv2=$("cTimelinePct");
   if(!cv)return;
   if(cnt)cnt.textContent=SNAPSHOTS.length+" snapshot"+(SNAPSHOTS.length!==1?"s":"");
   if(!SNAPSHOTS.length){
     if(empty)empty.style.display="block";
     cv.style.display="none";
+    if(cv2)cv2.style.display="none";
     if(_timelineChart){_timelineChart.destroy();_timelineChart=null;}
+    if(_timelinePctChart){_timelinePctChart.destroy();_timelinePctChart=null;}
     return;
   }
   if(empty)empty.style.display="none";
   cv.style.display="block";
+  if(cv2)cv2.style.display="block";
   if(_timelineChart){_timelineChart.destroy();_timelineChart=null;}
   _timelineChart=new Chart(cv,{
     type:"line",
@@ -3845,6 +3924,46 @@ function renderTimeline(){
         x:{grid:{color:"rgba(255,255,255,.04)"},ticks:{color:"#64748b",font:{size:10}}},
         y:{grid:{color:"rgba(255,255,255,.04)"},ticks:{color:"#64748b",font:{size:10},
           callback:function(v){return "$"+Math.round(v/1000)+"k";}}}
+      }
+    }
+  });
+  // Segundo grafico: retorno % rebaseado al primer snapshot donde cada serie > 0
+  if(!cv2)return;
+  if(_timelinePctChart){_timelinePctChart.destroy();_timelinePctChart=null;}
+  _timelinePctChart=new Chart(cv2,{
+    type:"line",
+    data:{
+      labels:SNAPSHOTS.map(function(s){return s.label;}),
+      datasets:[
+        {label:"Total",data:_pctSeries("totalPct"),
+          borderColor:"#f0a500",backgroundColor:"rgba(240,165,0,.12)",
+          fill:true,tension:.35,pointRadius:5,pointHoverRadius:7,
+          borderWidth:2,pointBackgroundColor:"#f0a500",spanGaps:true},
+        {label:"RV",data:_pctSeries("rvPct"),
+          borderColor:"#3b82f6",backgroundColor:"transparent",
+          fill:false,tension:.35,pointRadius:3,borderWidth:1.5,borderDash:[4,3],spanGaps:true},
+        {label:"RF",data:_pctSeries("rfPct"),
+          borderColor:"#10b981",backgroundColor:"transparent",
+          fill:false,tension:.35,pointRadius:3,borderWidth:1.5,borderDash:[4,3],spanGaps:true},
+        {label:"Cripto",data:_pctSeries("crPct"),
+          borderColor:"#f7931a",backgroundColor:"transparent",
+          fill:false,tension:.35,pointRadius:3,borderWidth:1.5,borderDash:[4,3],spanGaps:true}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{
+        legend:{display:true,position:"top",labels:{color:"#94a3b8",font:{size:10},boxWidth:14,padding:10}},
+        tooltip:{callbacks:{label:function(c){
+          if(c.parsed.y==null)return " "+c.dataset.label+": s/d";
+          var v=c.parsed.y;return " "+c.dataset.label+": "+(v>=0?"+":"")+v.toFixed(1)+"%";
+        }}}
+      },
+      scales:{
+        x:{grid:{color:"rgba(255,255,255,.04)"},ticks:{color:"#64748b",font:{size:10}}},
+        y:{grid:{color:"rgba(255,255,255,.04)"},ticks:{color:"#64748b",font:{size:10},
+          callback:function(v){return (v>=0?"+":"")+v+"%";}}}
       }
     }
   });
