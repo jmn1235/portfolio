@@ -503,7 +503,7 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
     <div id="sheetsStatus" style="font-size:10px;color:#34a853;margin-top:2px;display:none"></div>
     <div style="font-size:10px;color:var(--text3);margin-top:2px">Badge <span class="src-fh">FH</span>=Finnhub &middot; <span style="color:#34a853">GS</span>=Google Sheets &middot; <span style="color:#818cf8">auto</span>=regla &middot; <span style="color:#f59e0b">IA</span>=Claude</div></div>
   </div>
-  <div class="notab"><strong>Fuente ratios:</strong> <span class="src-sa">SA</span>=stockanalysis.com verificado &middot; <span class="src-ap">APX</span>=estimado &middot; <span class="src-fh">FH</span>=Finnhub tiempo real &middot; <span class="src-m">M</span>=manual &middot; Click columna=ordenar &middot; Click fila=detalle completo con graficos P/E y EPS vs sector</div>
+  <div class="notab"><strong>Fuente ratios:</strong> <span class="src-sa">SA</span>=stockanalysis.com verificado &middot; <span class="src-ap">APX</span>=estimado &middot; <span class="src-fh">FH</span>=Finnhub tiempo real &middot; <span class="src-m">M</span>=manual &middot; Click columna=ordenar &middot; Click fila=detalle completo con grafico P/E vs sector</div>
   <div class="tw"><table id="rvt">
     <thead id="rvh"><tr>
       <th data-col="0" data-type="str">Ticker</th>
@@ -527,13 +527,10 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
       <th data-col="18" data-type="num">P/E</th>
       <th data-col="19" data-type="num">P/E Sect.</th>
       <th data-col="20" data-type="num">P/E Rel.</th>
-      <th data-col="21" data-type="num">EPS $</th>
-      <th data-col="22" data-type="num">EPS Sect.$</th>
-      <th data-col="23" data-type="num">EPS Rel.</th>
-      <th data-col="24" data-type="num">Beta</th>
-      <th data-col="25" data-type="num">Div.Yield%</th>
-      <th data-col="26" data-type="num">Target $</th>
-      <th data-col="27" data-type="str">Val.</th>
+      <th data-col="21" data-type="num">Beta</th>
+      <th data-col="22" data-type="num">Div.Yield%</th>
+      <th data-col="23" data-type="num">Target $</th>
+      <th data-col="24" data-type="str">Val.</th>
       <th class="nosort">&#128465;</th>
     </tr></thead>
     <tbody id="rvb"></tbody>
@@ -1061,14 +1058,9 @@ function buildRVRow(a){
   var pvr=a.ppc>0?+((ppu-a.ppc)/a.ppc*100).toFixed(1):0;
   var peD=a.pe!=null?a.pe+"x":"N/D";
   var peSd=a.pes!=null?"~"+a.pes+"x":"N/D";
-  var eD=a.eps!=null?"$"+a.eps:"N/D";
-  var eSd=a.epss!=null?"$"+a.epss:"N/D";
   var peR=(a.pe!=null&&a.pes!=null&&a.pes>0)?+(a.pe/a.pes).toFixed(2):-99999;
-  var epR=(a.eps!=null&&a.epss!=null&&a.epss>0)?+(a.eps/a.epss).toFixed(2):-99999;
   var peRd=peR===-99999?"N/D":peR.toFixed(2)+"x";
-  var epRd=epR===-99999?"N/D":epR.toFixed(2)+"x";
   var peRc=peR===-99999?"":(peR<1?" clrp":" clrn");
-  var epRc=epR===-99999?"":(epR>1?" clrp":" clrn");
   // Use \x27 for apostrophes inside double-quoted strings
   var cr=a.cr||1;
   var tipoBdg=a.tipo==="CEDEAR"?'<span class="btag" style="background:rgba(139,92,246,.25);color:#a78bfa;border:1px solid #7c3aed;font-size:8px">CEDEAR</span>':
@@ -1100,9 +1092,6 @@ function buildRVRow(a){
     +"<td class=\"mono\" data-val=\""+fm(a.pe)+"\">"+peD+sh+"</td>"
     +"<td class=\"mono clru\" data-val=\""+fm(a.pes)+"\">"+peSd+"</td>"
     +"<td class=\"mono"+peRc+"\" data-val=\""+peR+"\">"+peRd+"</td>"
-    +"<td class=\"mono\" data-val=\""+fm(a.eps)+"\">"+eD+sh+"</td>"
-    +"<td class=\"mono clru\" data-val=\""+fm(a.epss)+"\">"+eSd+"</td>"
-    +"<td class=\"mono"+epRc+"\" data-val=\""+epR+"\">"+epRd+"</td>"
     +"<td class=\"mono"+(a.beta<0?" clrn":"")+"\" data-val=\""+a.beta+"\">"+a.beta+sh+"</td>"
     +"<td class=\"mono"+(a.dy>0?" clrp":" clru")+"\" data-val=\""+a.dy+"\">"+(a.dy?a.dy+"%":"0%")+"</td>"
     +"<td class=\"mono\" data-val=\""+(a.tg||0)+"\">"+(a.tg?"$"+a.tg:"N/D")+"</td>"
@@ -1119,12 +1108,10 @@ function addRVTotals(){
   var rp=vi>0?(rt/vi*100).toFixed(1):0;
   var peArr=RV.filter(function(a){return a.pe!=null;});
   var wpe=peArr.length>0?peArr.reduce(function(s,a){return s+a.pe*a.va;},0)/peArr.reduce(function(s,a){return s+a.va;},0):0;
-  var epArr=RV.filter(function(a){return a.eps!=null;});
-  var wep=epArr.length>0?epArr.reduce(function(s,a){return s+a.eps*a.va;},0)/epArr.reduce(function(s,a){return s+a.va;},0):0;
   var wb=RV.reduce(function(s,a){return s+a.beta*a.va;},0)/va;
   var tr=document.createElement("tr");tr.className="totrow";
   tr.innerHTML='<td colspan="2" style="font-weight:700;color:var(--gold)">&#931; TOTAL / PROM.</td>'
-    +'<td></td><td></td><td></td><td></td><td></td><td></td>'
+    +'<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>'
     +'<td class="mono">$'+Math.round(va).toLocaleString()+'</td>'
     +'<td class="mono clru">$'+Math.round(vi).toLocaleString()+'</td>'
     +'<td class="mono'+(va-vi>=0?" clrp":" clrn")+'">'+(va-vi>=0?"+":"")+'$'+Math.abs(Math.round(va-vi)).toLocaleString()+'</td>'
@@ -1133,8 +1120,6 @@ function addRVTotals(){
     +'<td>'+pb(parseFloat(rp))+'</td>'
     +'<td></td><td></td>'
     +'<td class="mono">'+wpe.toFixed(1)+'x avg</td>'
-    +'<td></td><td></td>'
-    +'<td class="mono">$'+wep.toFixed(2)+' avg</td>'
     +'<td></td><td></td>'
     +'<td class="mono">'+wb.toFixed(2)+'&beta;</td>'
     +'<td></td><td></td><td></td><td></td>';
@@ -1594,9 +1579,8 @@ function saveRVEdit(key){
     if(validTipos.indexOf(tipo)>=0)a.tipo=tipo;
     else alert("Tipo \""+tipo+"\" no reconocido. Valores validos: "+validTipos.join(", ")+". Se mantiene el anterior.");
   }
-  var pe=gn("edpe"),eps=gn("edeps"),beta=gn("edbeta"),dy=gn("eddy"),tg=gn("edtg");
+  var pe=gn("edpe"),beta=gn("edbeta"),dy=gn("eddy"),tg=gn("edtg");
   if(!isNaN(pe)){a.pe=pe;a.src="M";}
-  if(!isNaN(eps)){a.eps=eps;a.src="M";}
   if(!isNaN(beta)){a.beta=beta;a.src="M";}
   if(!isNaN(dy))a.dy=dy;
   if(!isNaN(tg))a.tg=tg;
@@ -1642,7 +1626,10 @@ function openModal(type,key){
     else{var c=CR.find(function(x){return x.k===key;});if(c)buildCRModal(c);}
     $("modalOverlay").classList.add("open");
     document.body.style.overflow="hidden";
-  }catch(e){console.error("Modal error:",e);}
+  }catch(e){
+    console.error("Modal error para "+type+" "+key+":",e);
+    alert("Error abriendo el modal de "+key+":\n\n"+(e.message||e)+"\n\nDetalles en la consola del navegador (F12).");
+  }
 }
 function closeModal(){
   $("modalOverlay").classList.remove("open");
@@ -1661,11 +1648,22 @@ function buildRVModal(a){
   if(!a.pp)a.pp=[];
   if(!a.ep)a.ep=[];
   if(!a.rec||!a.rec.a){try{a.rec=autoRec(a);}catch(e){a.rec={a:"hold",l:"MANTENER",t:"",ri:[]};}}
+  if(!a.ri||!Array.isArray(a.ri))a.ri=(a.rec&&Array.isArray(a.rec.ri))?a.rec.ri:[];
   if(a.nm==null)a.nm=a.k;
   if(a.sec==null)a.sec="N/D";
   if(a.br==null)a.br="Importado";
   if(a.dv==null)a.dv=0;
   if(a.dy==null)a.dy=0;
+  // Defensa contra .toLocaleString() en undefined
+  if(a.vi==null)a.vi=0;
+  if(a.va==null)a.va=0;
+  if(a.rc==null)a.rc=0;
+  if(a.rt==null)a.rt=0;
+  if(a.rp==null)a.rp=0;
+  if(a.ca==null)a.ca=0;
+  if(a.d==null)a.d=0;
+  if(a.n==null)a.n=0;
+  if(a.ppc==null)a.ppc=0;
   var sh=src(a.src);
   var ppu=a.n>0?Math.round(a.va/a.n*100)/100:0;
   var pvr=a.ppc>0?+((ppu-a.ppc)/a.ppc*100).toFixed(1):0;
@@ -1706,19 +1704,17 @@ function buildRVModal(a){
   body+='<div style="margin-bottom:13px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px">Fundamentals '+sh+'</div>'
     +'<div class="kpig">'
     +mkpi("P/E TTM",a.pe!=null?a.pe+"x":"N/D","vs sec. "+(a.pes?"~"+a.pes+"x":"N/D"),null)
-    +mkpi("EPS TTM",a.eps!=null?"$"+a.eps:"N/D","vs sec. "+(a.epss?"$"+a.epss:"N/D"),null)
     +mkpi("Beta "+sh,a.beta,null,null)
     +mkpi("Div. Yield",a.dy?a.dy+"%":"0%",null,a.dy>0?"#fbbf24":"var(--text3)")
     +mkpi("Target consenso",a.tg?"$"+a.tg:"N/D",upside?"upside +"+upside+"%":null,"var(--green)")
     +mkpi("Upside vs precio",upside?"+"+upside+"%":"N/D",null,"var(--green)")
     +'</div></div>';
 
-  // PEER CHARTS
-  if(a.pp.length>0||a.ep.length>0){
-    body+='<div class="mcharts">';
-    if(a.pp.length>0)body+='<div class="mcc"><div class="mct">P/E TTM vs Peers '+sh+'</div><div style="position:relative;height:145px;width:100%"><canvas id="mc1"></canvas></div></div>';
-    if(a.ep.length>0&&a.ep.some(function(p){return p.v!=null;}))body+='<div class="mcc"><div class="mct">EPS TTM vs Peers '+sh+'</div><div style="position:relative;height:145px;width:100%"><canvas id="mc2"></canvas></div></div>';
-    body+='</div>';
+  // PEER CHART P/E
+  if(a.pp.length>0){
+    body+='<div class="mcharts">'
+      +'<div class="mcc"><div class="mct">P/E TTM vs Peers '+sh+'</div><div style="position:relative;height:145px;width:100%"><canvas id="mc1"></canvas></div></div>'
+      +'</div>';
   }
 
   // ANALISTAS
@@ -1797,7 +1793,6 @@ function buildRVModal(a){
     +'<div style="font-size:10px;color:var(--text3);margin:8px 0 4px">Ratios fundamentales</div>'
     +'<div class="egrid">'
     +efl("edpe","P/E TTM",a.pe)
-    +efl("edeps","EPS TTM ($)",a.eps)
     +efl("edbeta","Beta",a.beta)
     +efl("eddy","Div.Yield (%)",a.dy||0)
     +efl("edtg","Target $ consenso",a.tg)
@@ -1830,17 +1825,6 @@ function buildRVModal(a){
         options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",
           plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return " "+c.parsed.x+"x P/E";}}}},
           scales:{x:{grid:{color:"rgba(255,255,255,.04)"},ticks:{color:"#64748b",font:{size:10},callback:function(v){return v+"x";}}},y:{grid:{display:false},ticks:{color:"#94a3b8",font:{size:11}}}}}});
-    }
-    if(a.ep.length&&a.ep.some(function(p){return p.v!=null;})&&$("mc2")){
-      var vp=a.ep.filter(function(p){return p.v!=null;});
-      modalChart2=new Chart($("mc2"),{type:"bar",data:{labels:vp.map(function(p){return p.n;}),
-        datasets:[{data:vp.map(function(p){return p.v;}),
-          backgroundColor:vp.map(function(p){return p.h?"rgba(16,185,129,.85)":p.a?"rgba(148,163,184,.4)":"rgba(99,102,241,.5)";}),
-          borderColor:vp.map(function(p){return p.h?"#10b981":p.a?"#94a3b8":"#818cf8";}),
-          borderWidth:1,borderRadius:4}]},
-        options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",
-          plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return " $"+c.parsed.x+" EPS";}}}},
-          scales:{x:{grid:{color:"rgba(255,255,255,.04)"},ticks:{color:"#64748b",font:{size:10},callback:function(v){return "$"+v;}}},y:{grid:{display:false},ticks:{color:"#94a3b8",font:{size:11}}}}}});
     }
   },60);
 }
@@ -2005,8 +1989,6 @@ function openAddModal(type){
       +'<div class="egrid">'
       +f("pe","P/E TTM","29.5","number")
       +f("pes","P/E Sector","28.0","number")
-      +f("eps","EPS TTM $","10.91","number")
-      +f("epss","EPS Sector $","14.3","number")
       +f("beta","Beta","1.13","number")
       +f("dy","Div.Yield %","0","number")
       +f("tg","Target $","354","number")
@@ -2072,7 +2054,7 @@ function saveNewRV(){
   var rt=Math.round((rc+dv)*100)/100;
   var rp=vi>0?Math.round(rt/vi*1000)/10:0;
   var ca=d>0&&vi>0?Math.round((Math.pow(va/vi,365/d)-1)*1000)/10:0;
-  var pe=gn("naddpe"),pes=gn("naddpes"),eps=gn("naddeps"),epss=gn("naddepss");
+  var pe=gn("naddpe"),pes=gn("naddpes");
   var beta=gn("naddbeta"),dy=gn("nadddy"),tg=gn("naddtg");
   var tipoNuevo=(gv("naddtipo")||"CEDEAR").toUpperCase().trim();
   var validTipos=["CEDEAR","CEDEAR-ETF","ADR","ARG","USA"];
@@ -2082,7 +2064,6 @@ function saveNewRV(){
     tipo:tipoNuevo,cr:crNuevo,
     n:n,ppc:ppc,va:va,vi:vi,rc:rc,dv:dv,rt:rt,rp:rp,ca:ca,d:d,
     pe:isNaN(pe)?null:pe,pes:isNaN(pes)?null:pes,
-    eps:isNaN(eps)?null:eps,epss:isNaN(epss)?null:epss,
     beta:isNaN(beta)?1.0:beta,dy:isNaN(dy)?0:dy,tg:isNaN(tg)?null:tg,
     vl:"-",con:false,src:"M",
     rec:{a:"hold",l:"NUEVO ACTIVO",t:"Ingresado manualmente. Actualizar ratios con Finnhub."},
@@ -4814,7 +4795,8 @@ function saveToFirestore(){
       pe:a.pe||null,pes:a.pes||null,eps:a.eps||null,epss:a.epss||null,
       beta:a.beta||null,dy:a.dy||0,tg:a.tg||null,vl:a.vl||"-",src:a.src||"",
       recManual:a.recManual||false,rec:a.rec||null,
-      pp:a.pp||[],ep:a.ep||[],an:a.an||{sb:0,b:0,h:0,s:0}
+      pp:a.pp||[],ep:a.ep||[],an:a.an||{sb:0,b:0,h:0,s:0},
+      ri:Array.isArray(a.ri)?a.ri:[]
     };}),
     rf:RF.map(function(b){return {
       k:b.k,nm:b.nm||"",tp:b.tp||"",tc:b.tc||"",
