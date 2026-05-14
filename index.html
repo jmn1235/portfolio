@@ -498,6 +498,7 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
   <div class="upd-bar" style="flex-wrap:wrap;gap:8px">
     <button class="btn-blue" id="fhBtn" onclick="updateFinnhub()">&#128260; Actualizar con Finnhub</button>
     <button class="btn-blue" style="background:rgba(52,168,83,.2);border-color:#34a853;color:#34a853" onclick="openSheetsConfig()">&#128202; Google Sheets</button>
+    <button class="btn-blue" style="background:rgba(167,139,250,.2);border-color:#a78bfa;color:#a78bfa" onclick="openCSVTxModal()">&#128194; Importar compras/ventas CSV</button>
     <button class="btn-ghost" onclick="clearStorage()" style="font-size:11px">&#8635; Resetear</button>
     <div style="flex:1;min-width:200px"><div class="upd-status" id="fhStatus">FH actualiza precios y ratios &middot; IA genera recomendaciones con Claude</div>
     <div id="sheetsStatus" style="font-size:10px;color:#34a853;margin-top:2px;display:none"></div>
@@ -2762,6 +2763,295 @@ function applySheetsUpdates(allItems){
 }
 
 // ================================================================
+// CSV TRANSACTIONS IMPORT (compras / ventas en bulk)
+// ================================================================
+var _csvTxParsed=[]; // {type, ticker, name, broker, sector, tipo, cr, qty, price, date, sale_price, note, isNew, asset, _result}
+
+function openCSVTxModal(){
+  $("csvTxStep1").style.display="block";
+  $("csvTxStep2").style.display="none";
+  $("csvTxInput").value="";
+  $("csvTxErrors").style.display="none";
+  _csvTxParsed=[];
+  $("csvTxModal").style.display="flex";
+}
+
+function closeCSVTxModal(){
+  $("csvTxModal").style.display="none";
+}
+
+function csvTxBack(){
+  $("csvTxStep1").style.display="block";
+  $("csvTxStep2").style.display="none";
+}
+
+function loadCSVTxFile(input){
+  var f=input.files&&input.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(e){$("csvTxInput").value=e.target.result;};
+  r.readAsText(f);
+}
+
+function loadCSVTxExample(){
+  $("csvTxInput").value="type,ticker,name,broker,sector,tipo,cr,qty,price,date,sale_price,note\n"
+    +"BUY,KO,Coca-Cola,Balanz,Bebidas,CEDEAR,5,10,14.20,2026-05-10,,Compra Balanz\n"
+    +"BUY,GGAL,Grupo Financiero Galicia,Balanz,Banco ARG,ADR,10,50,5.50,2026-05-10,,\n"
+    +"BUY,NVDA,Nvidia,Balanz,Big Tech,CEDEAR,15,8,8.50,2026-05-11,,Activo nuevo\n"
+    +"SELL,SQM.E,,,,,,5,,2026-05-12,95.00,Venta parcial";
+}
+
+// Parser CSV simple — soporta comillas (RFC 4180 reducido)
+function _csvSplit(line){
+  var out=[],cur="",inQ=false;
+  for(var i=0;i<line.length;i++){
+    var ch=line[i];
+    if(ch=='"'){
+      if(inQ && line[i+1]=='"'){cur+='"';i++;}
+      else inQ=!inQ;
+    } else if(ch==',' && !inQ){
+      out.push(cur);cur="";
+    } else cur+=ch;
+  }
+  out.push(cur);
+  return out.map(function(s){return s.trim();});
+}
+
+function parseCSVTx(){
+  var raw=$("csvTxInput").value.trim();
+  if(!raw){alert("Pegá un CSV o subí un archivo.");return;}
+
+  var lines=raw.split(/\r?\n/).map(function(l){return l.trim();})
+    .filter(function(l){return l && !l.startsWith("#");});
+  if(!lines.length){alert("CSV vacío.");return;}
+
+  // Detectar header
+  var headerCols=["type","ticker","name","broker","sector","tipo","cr","qty","price","date","sale_price","note"];
+  var first=_csvSplit(lines[0]).map(function(c){return c.toLowerCase();});
+  var hasHeader=first[0]==="type" || first[0]==="tipo_op";
+  var dataLines=hasHeader?lines.slice(1):lines;
+
+  var errors=[],parsed=[];
+  var today=new Date().toISOString().slice(0,10);
+
+  dataLines.forEach(function(line,i){
+    var rowNum=hasHeader?i+2:i+1;
+    var cols=_csvSplit(line);
+    if(cols.length<3){errors.push("L"+rowNum+": muy pocas columnas ("+cols.length+")");return;}
+    // Pad si faltan columnas
+    while(cols.length<12)cols.push("");
+
+    var type=(cols[0]||"").toUpperCase().trim();
+    if(type!=="BUY" && type!=="SELL"){errors.push("L"+rowNum+": type debe ser BUY o SELL (recibido: '"+cols[0]+"')");return;}
+
+    var ticker=(cols[1]||"").toUpperCase().trim();
+    if(!ticker){errors.push("L"+rowNum+": ticker vacío");return;}
+    if(!/^[A-Z0-9.\-]+$/.test(ticker)){errors.push("L"+rowNum+": ticker '"+ticker+"' tiene caracteres inválidos");return;}
+
+    var qty=parseFloat(cols[7]);
+    if(isNaN(qty)||qty<=0){errors.push("L"+rowNum+": qty inválido ('"+cols[7]+"')");return;}
+
+    var price=parseFloat(cols[8]);
+    var salePrice=parseFloat(cols[10]);
+    var date=(cols[9]||"").trim()||today;
+    // Validación básica de fecha
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){errors.push("L"+rowNum+": fecha '"+date+"' no es YYYY-MM-DD");return;}
+
+    if(type==="BUY" && (isNaN(price)||price<=0)){errors.push("L"+rowNum+": BUY requiere price > 0");return;}
+    if(type==="SELL" && (isNaN(salePrice)||salePrice<=0)){errors.push("L"+rowNum+": SELL requiere sale_price > 0");return;}
+
+    var existing=RV.find(function(a){return a.k===ticker;});
+    var isNew=type==="BUY" && !existing;
+
+    if(type==="SELL" && !existing){errors.push("L"+rowNum+": SELL de '"+ticker+"' pero no existe en el portfolio");return;}
+    if(type==="SELL" && qty>existing.n){errors.push("L"+rowNum+": SELL qty="+qty+" pero solo tenés "+existing.n+" de "+ticker);return;}
+
+    parsed.push({
+      type:type, ticker:ticker,
+      name:cols[2]||"", broker:cols[3]||"", sector:cols[4]||"", tipo:(cols[5]||"").toUpperCase(),
+      cr:parseFloat(cols[6])||1,
+      qty:qty, price:price, date:date,
+      sale_price:salePrice, note:cols[11]||"",
+      isNew:isNew, asset:existing||null,
+      rowNum:rowNum
+    });
+  });
+
+  // Mostrar errores
+  var errBox=$("csvTxErrors");
+  if(errors.length){
+    errBox.innerHTML="<b>Se encontraron "+errors.length+" errores:</b><br>"+errors.join("<br>");
+    errBox.style.display="block";
+  } else {
+    errBox.style.display="none";
+  }
+
+  if(!parsed.length){
+    alert("No se pudo parsear ninguna transacción válida.");
+    return;
+  }
+
+  // Calcular el resultado esperado para preview
+  parsed.forEach(function(p){
+    if(p.type==="BUY"){
+      if(p.isNew){
+        p._result="Crear nuevo activo · "+p.qty+" u × $"+p.price+" = $"+(p.qty*p.price).toFixed(2);
+      } else {
+        var oldN=p.asset.n, oldPpc=p.asset.ppc, oldD=p.asset.d||0;
+        var newN=oldN+p.qty;
+        var newPpc=(oldN*oldPpc + p.qty*p.price)/newN;
+        // Días ponderados
+        var dNew=Math.max(1,Math.round((new Date()-new Date(p.date))/86400000));
+        var newD=Math.round((oldN*oldD + p.qty*dNew)/newN);
+        p._calc={newN:newN, newPpc:Math.round(newPpc*100)/100, newD:newD, dNew:dNew, costAmt:p.qty*p.price};
+        p._result="PPC: $"+oldPpc.toFixed(2)+" → $"+p._calc.newPpc.toFixed(2)+" · Noms: "+oldN+" → "+newN+" · Costo: $"+p._calc.costAmt.toFixed(2);
+      }
+    } else {
+      // SELL
+      var ppc=p.asset.ppc;
+      var pnl=Math.round((p.sale_price-ppc)*p.qty*100)/100;
+      var pct=ppc>0?Math.round((p.sale_price-ppc)/ppc*1000)/10:0;
+      var saleAmt=Math.round(p.qty*p.sale_price*100)/100;
+      var isTotal=p.qty===p.asset.n;
+      p._calc={pnl:pnl, pct:pct, saleAmt:saleAmt, isTotal:isTotal};
+      p._result=(isTotal?"VENTA TOTAL · ":"Venta parcial "+p.qty+"/"+p.asset.n+" · ")
+        +"P&L: "+(pnl>=0?"+":"")+"$"+pnl.toFixed(2)+" ("+(pct>=0?"+":"")+pct+"%) · Cobrás $"+saleAmt.toFixed(2);
+    }
+  });
+
+  _csvTxParsed=parsed;
+
+  // Resumen
+  var nBuy=parsed.filter(function(p){return p.type==="BUY";}).length;
+  var nSell=parsed.filter(function(p){return p.type==="SELL";}).length;
+  var nNew=parsed.filter(function(p){return p.isNew;}).length;
+  var totBuy=parsed.filter(function(p){return p.type==="BUY";}).reduce(function(s,p){return s+p.qty*p.price;},0);
+  var totSell=parsed.filter(function(p){return p.type==="SELL";}).reduce(function(s,p){return s+p._calc.saleAmt;},0);
+  $("csvTxSummary").innerHTML="<b style='color:#a78bfa'>"+parsed.length+" transacciones</b> &middot; "
+    +"<span style='color:#10b981'>"+nBuy+" compras"+(nNew?" ("+nNew+" nuevos)":"")+"</span> "
+    +(totBuy>0?"<span style='color:var(--text3)'>($"+totBuy.toFixed(2)+")</span> &middot; ":" &middot; ")
+    +"<span style='color:#ef4444'>"+nSell+" ventas</span>"
+    +(totSell>0?" <span style='color:var(--text3)'>($"+totSell.toFixed(2)+")</span>":"");
+
+  // Renderizar tabla preview
+  var body=$("csvTxPreviewBody");
+  body.innerHTML=parsed.map(function(p,i){
+    var opBdg=p.type==="BUY"
+      ?(p.isNew?'<span style="font-size:9px;color:#818cf8;background:rgba(129,140,248,.15);padding:2px 6px;border-radius:3px">BUY-NEW</span>'
+                :'<span style="font-size:9px;color:#10b981;background:rgba(16,185,129,.15);padding:2px 6px;border-radius:3px">BUY</span>')
+      :'<span style="font-size:9px;color:#ef4444;background:rgba(239,68,68,.15);padding:2px 6px;border-radius:3px">SELL</span>';
+    var priceCell=p.type==="BUY"?"$"+p.price.toFixed(2):"$"+p.sale_price.toFixed(2);
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:7px"><input type="checkbox" id="csvTxck'+i+'" checked style="width:14px;height:14px;accent-color:#a78bfa"></td>'
+      +'<td style="padding:7px">'+opBdg+'</td>'
+      +'<td style="padding:7px;font-weight:600">'+p.ticker+(p.note?'<div style="font-size:9px;color:var(--text3);font-weight:400">'+p.note.slice(0,40)+'</div>':'')+'</td>'
+      +'<td style="padding:7px;text-align:right;font-family:\'IBM Plex Mono\',monospace">'+p.qty+'</td>'
+      +'<td style="padding:7px;text-align:right;font-family:\'IBM Plex Mono\',monospace">'+priceCell+'</td>'
+      +'<td style="padding:7px;font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:var(--text3)">'+p.date+'</td>'
+      +'<td style="padding:7px;font-size:10px;color:var(--text2)">'+p._result+'</td>'
+      +'</tr>';
+  }).join("");
+
+  $("csvTxStep1").style.display="none";
+  $("csvTxStep2").style.display="block";
+}
+
+function applyCSVTx(){
+  var toApply=[];
+  _csvTxParsed.forEach(function(p,i){
+    var ck=$("csvTxck"+i);
+    if(ck && ck.checked) toApply.push(p);
+  });
+  if(!toApply.length){alert("No hay transacciones seleccionadas.");return;}
+
+  if(!confirm("Aplicar "+toApply.length+" transacciones? Esta acción es difícil de deshacer (vas a tener que editar/borrar cada una manualmente).")) return;
+
+  var applied=0, errors=[];
+  var totalSpent=0, totalReceived=0;
+  var labels=[];
+
+  toApply.forEach(function(p){
+    try{
+      if(p.type==="BUY"){
+        if(p.isNew){
+          // Crear activo nuevo
+          var validTipos=["CEDEAR","CEDEAR-ETF","ADR","ARG","USA"];
+          var tipoNew=validTipos.indexOf(p.tipo)>=0?p.tipo:"CEDEAR";
+          var dDays=Math.max(1,Math.round((new Date()-new Date(p.date))/86400000));
+          var vi=p.qty*p.price, va=vi; // V.Actual = V.Inicial al momento de crear
+          RV.push({
+            k:p.ticker, nm:p.name||p.ticker,
+            br:p.broker||"Balanz", sec:p.sector||"N/D",
+            tipo:tipoNew, cr:p.cr||1, con:false,
+            n:p.qty, ppc:p.price, va:va, vi:vi,
+            rc:0, dv:0, rt:0, rp:0, ca:0, d:dDays, bd:p.date,
+            pe:null, pes:null, beta:1.0, dy:0, tg:null,
+            vl:"-", src:"M",
+            rec:{a:"hold", l:"NUEVO ACTIVO", t:"Importado desde CSV el "+p.date+(p.note?". "+p.note:""), ri:[]},
+            ri:[], pp:[], ep:[], an:{sb:0,b:0,h:0,s:0}
+          });
+          totalSpent+=vi;
+          labels.push("BUY "+p.ticker+" (nuevo, "+p.qty+"u)");
+        } else {
+          // Consolidar compra en existente
+          var a=p.asset;
+          var c=p._calc;
+          a.ppc=c.newPpc;
+          a.n=c.newN;
+          a.d=c.newD;
+          // V.Inicial sube por la nueva compra; V.Actual sube por el costo (asumimos precio actual = precio de compra)
+          a.vi=Math.round((a.vi + c.costAmt)*100)/100;
+          a.va=Math.round((a.va + c.costAmt)*100)/100;
+          recalcRV(a);
+          if(!a.recManual && typeof autoRec==="function")a.rec=autoRec(a);
+          totalSpent+=c.costAmt;
+          labels.push("BUY "+p.ticker+" (+"+p.qty+"u)");
+        }
+      } else {
+        // SELL
+        var a2=p.asset;
+        var c2=p._calc;
+        REALIZED.push({
+          k:p.ticker, nm:a2.nm, n:p.qty, ppc:a2.ppc,
+          salePrice:p.sale_price, pnl:c2.pnl, pct:c2.pct,
+          date:p.date.split("-").reverse().join("/"), // YYYY-MM-DD → DD/MM/YYYY
+          type:"RV",
+          note:p.note||""
+        });
+        if(c2.isTotal){
+          var idx=RV.findIndex(function(x){return x.k===p.ticker;});
+          if(idx>=0)RV.splice(idx,1);
+        } else {
+          a2.n=a2.n-p.qty;
+          a2.vi=Math.round(a2.n*a2.ppc*100)/100;
+          // V.Actual: lo reducimos proporcionalmente (asumimos misma valuación/u)
+          var newVa=Math.round(a2.n*(a2.va/(a2.n+p.qty))*100)/100;
+          a2.va=newVa;
+          recalcRV(a2);
+        }
+        totalReceived+=c2.saleAmt;
+        labels.push("SELL "+p.ticker+" "+p.qty+"u");
+      }
+      applied++;
+    }catch(e){
+      errors.push("Error en "+p.ticker+": "+e.message);
+    }
+  });
+
+  saveRealized();
+  reRV();refreshKPIs();saveToFirestore();
+  closeCSVTxModal();
+
+  if(errors.length){
+    alert("Aplicadas "+applied+"/"+toApply.length+" transacciones.\n\nErrores:\n"+errors.join("\n"));
+  }
+
+  // Preguntar por caja (un solo prompt por dirección)
+  var labelSummary=labels.length<=3?labels.join(", "):labels.slice(0,3).join(", ")+" y "+(labels.length-3)+" más";
+  if(totalSpent>0)askTakeFromCash(Math.round(totalSpent*100)/100,"compras CSV: "+labelSummary);
+  if(totalReceived>0)askAddToCash(Math.round(totalReceived*100)/100,"ventas CSV: "+labelSummary);
+}
+
+// ================================================================
 // CHARTS
 // ================================================================
 function initCharts(){
@@ -5009,6 +5299,75 @@ setTimeout(function(){
         🗑️ Solo ELIMINAR <span style="font-weight:400;color:rgba(239,68,68,.75);font-size:11px">— sin impacto en P&L ni caja</span>
       </button>
       <button class="btn-ghost" onclick="closeDeleteAssetModal()" style="margin-top:4px">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV Transactions Import Modal -->
+<div class="mo" id="csvTxModal" style="display:none" onclick="if(event.target===this)closeCSVTxModal()">
+  <div class="mc" style="max-width:880px;max-height:92vh;overflow-y:auto">
+    <button class="mcls" onclick="closeCSVTxModal()">×</button>
+    <h3 style="margin:0 0 6px 0;color:#a78bfa">📁 Importar compras / ventas desde CSV</h3>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">
+      Pegá un CSV de transacciones (compras o ventas) o subí un archivo. Vas a poder revisar cada operación antes de aplicar.
+    </div>
+
+    <div id="csvTxStep1">
+      <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button onclick="document.getElementById('csvTxFile').click()" class="btn-ghost" style="font-size:11px">📤 Subir archivo CSV</button>
+        <input type="file" id="csvTxFile" accept=".csv,.txt" style="display:none" onchange="loadCSVTxFile(this)">
+        <button onclick="loadCSVTxExample()" class="btn-ghost" style="font-size:11px">📋 Ver ejemplo</button>
+        <span style="font-size:10px;color:var(--text3);flex:1">o pegá el contenido abajo</span>
+      </div>
+
+      <textarea id="csvTxInput" placeholder="type,ticker,name,broker,sector,tipo,cr,qty,price,date,sale_price,note&#10;BUY,KO,Coca-Cola,Balanz,Bebidas,CEDEAR,5,10,14.20,2026-05-10,,&#10;BUY,GGAL,Grupo Financiero Galicia,Balanz,Banco ARG,ADR,10,50,5.50,2026-05-10,,Compra en oferta&#10;SELL,SQM.E,,,,,,5,,2026-05-12,95.00,Venta parcial" style="width:100%;height:180px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box;resize:vertical"></textarea>
+
+      <details style="margin-top:10px;font-size:11px;color:var(--text3)">
+        <summary style="cursor:pointer;color:var(--text2);user-select:none">📑 Formato esperado y reglas</summary>
+        <div style="padding:10px;background:var(--bg3);border-radius:6px;margin-top:6px;line-height:1.55">
+          <div><b style="color:var(--text)">Columnas (en este orden):</b></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a78bfa;margin:4px 0">type,ticker,name,broker,sector,tipo,cr,qty,price,date,sale_price,note</div>
+          <div style="margin-top:6px"><b style="color:var(--text)">Reglas:</b></div>
+          <ul style="margin:4px 0 0 18px;padding:0">
+            <li><b>type</b>: BUY o SELL (obligatorio)</li>
+            <li><b>ticker, qty, date</b>: obligatorios. Si date está vacío, se usa hoy.</li>
+            <li>Para <b>BUY</b>: <b>price</b> es el precio de compra por unidad. Si el ticker ya existe, se recalcula PPC y días ponderados (no reemplaza). Si es nuevo, los campos <b>name/broker/sector/tipo/cr</b> se usan para crearlo.</li>
+            <li>Para <b>SELL</b>: <b>sale_price</b> es el precio de venta por unidad. Se registra en el historial con P&L. Si qty = total, elimina el activo.</li>
+            <li><b>note</b>: texto opcional. Para ventas queda guardado.</li>
+            <li>Líneas vacías y que empiecen con <b>#</b> se ignoran.</li>
+            <li>La primera línea puede ser el header (se detecta automáticamente).</li>
+          </ul>
+        </div>
+      </details>
+
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn-save" onclick="parseCSVTx()" style="background:rgba(167,139,250,.2);border-color:#a78bfa;color:#a78bfa">🔍 Analizar CSV</button>
+        <button class="btn-ghost" onclick="closeCSVTxModal()">Cancelar</button>
+      </div>
+    </div>
+
+    <div id="csvTxStep2" style="display:none">
+      <div id="csvTxSummary" style="margin-bottom:10px;padding:9px 12px;background:var(--bg3);border-radius:6px;font-size:11px"></div>
+      <div id="csvTxErrors" style="display:none;margin-bottom:10px;padding:9px 12px;background:rgba(239,68,68,.1);border:1px solid #ef4444;border-radius:6px;font-size:11px;color:#ef4444"></div>
+      <div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:6px">
+        <table id="csvTxPreview" style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:var(--bg3);position:sticky;top:0">
+            <th style="padding:7px;text-align:left">✓</th>
+            <th style="padding:7px;text-align:left">Op</th>
+            <th style="padding:7px;text-align:left">Ticker</th>
+            <th style="padding:7px;text-align:right">Cant</th>
+            <th style="padding:7px;text-align:right">Precio</th>
+            <th style="padding:7px;text-align:left">Fecha</th>
+            <th style="padding:7px;text-align:left">Resultado esperado</th>
+          </tr></thead>
+          <tbody id="csvTxPreviewBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn-save" onclick="applyCSVTx()">✓ Aplicar transacciones seleccionadas</button>
+        <button class="btn-ghost" onclick="csvTxBack()">← Volver</button>
+        <button class="btn-ghost" onclick="closeCSVTxModal()">Cancelar</button>
+      </div>
     </div>
   </div>
 </div>
