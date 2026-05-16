@@ -498,7 +498,7 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
   <div class="upd-bar" style="flex-wrap:wrap;gap:8px">
     <button class="btn-blue" id="fhBtn" onclick="updateFinnhub()">&#128260; Actualizar con Finnhub</button>
     <button class="btn-blue" style="background:rgba(52,168,83,.2);border-color:#34a853;color:#34a853" onclick="openSheetsConfig()">&#128202; Google Sheets</button>
-    <button class="btn-blue" style="background:rgba(167,139,250,.2);border-color:#a78bfa;color:#a78bfa" onclick="openCSVTxModal()">&#128194; Importar compras/ventas CSV</button>
+    <button class="btn-blue" style="background:rgba(167,139,250,.2);border-color:#a78bfa;color:#a78bfa" onclick="openCSVTxModal()">&#128194; Importar compras/ventas CSV (RV+RF)</button>
     <button class="btn-ghost" onclick="clearStorage()" style="font-size:11px">&#8635; Resetear</button>
     <div style="flex:1;min-width:200px"><div class="upd-status" id="fhStatus">FH actualiza precios y ratios &middot; IA genera recomendaciones con Claude</div>
     <div id="sheetsStatus" style="font-size:10px;color:#34a853;margin-top:2px;display:none"></div>
@@ -543,6 +543,9 @@ td{padding:7px 8px;vertical-align:middle;white-space:nowrap}
 </div>
 
 <div id="panel-rf" class="panel">
+  <div style="margin:0 0 12px 0;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn-blue" style="background:rgba(167,139,250,.2);border-color:#a78bfa;color:#a78bfa" onclick="openCSVTxModal()">&#128194; Importar compras/ventas CSV (RV+RF)</button>
+  </div>
   <div class="notab"><strong>Click columna</strong> para ordenar &middot; <strong>Click fila</strong> para detalle completo y edicion</div>
   <div class="tw"><table id="rft">
     <thead id="rfh"><tr>
@@ -2794,10 +2797,15 @@ function loadCSVTxFile(input){
 
 function loadCSVTxExample(){
   $("csvTxInput").value="type,ticker,name,broker,sector,tipo,cr,qty,price,date,sale_price,note\n"
+    +"# RENTA VARIABLE (BUY/SELL)\n"
     +"BUY,KO,Coca-Cola,Balanz,Bebidas,CEDEAR,5,10,14.20,2026-05-10,,Compra Balanz\n"
     +"BUY,GGAL,Grupo Financiero Galicia,Balanz,Banco ARG,ADR,10,50,5.50,2026-05-10,,\n"
     +"BUY,NVDA,Nvidia,Balanz,Big Tech,CEDEAR,15,8,8.50,2026-05-11,,Activo nuevo\n"
-    +"SELL,SQM.E,,,,,,5,,2026-05-12,95.00,Venta parcial";
+    +"SELL,SQM.E,,,,,,5,,2026-05-12,95.00,Venta parcial\n"
+    +"# RENTA FIJA (BUY-RF/SELL-RF)\n"
+    +"BUY-RF,YM38D,ON YPF Clase 38,IOL,Energia,ON,,2500,101.50,2026-05-15,,Compra ON IOL\n"
+    +"BUY-RF,TZX6D,Bono CER V30,IOL,Soberano ARG,Bono,,1848486,0.22,2026-05-15,,Bono CER\n"
+    +"SELL-RF,YM37D,,,,,,1000,,2026-05-16,102.85,Venta parcial ON";
 }
 
 // Parser CSV simple — soporta comillas (RFC 4180 reducido)
@@ -2825,7 +2833,6 @@ function parseCSVTx(){
   if(!lines.length){alert("CSV vacío.");return;}
 
   // Detectar header
-  var headerCols=["type","ticker","name","broker","sector","tipo","cr","qty","price","date","sale_price","note"];
   var first=_csvSplit(lines[0]).map(function(c){return c.toLowerCase();});
   var hasHeader=first[0]==="type" || first[0]==="tipo_op";
   var dataLines=hasHeader?lines.slice(1):lines;
@@ -2837,11 +2844,13 @@ function parseCSVTx(){
     var rowNum=hasHeader?i+2:i+1;
     var cols=_csvSplit(line);
     if(cols.length<3){errors.push("L"+rowNum+": muy pocas columnas ("+cols.length+")");return;}
-    // Pad si faltan columnas
     while(cols.length<12)cols.push("");
 
     var type=(cols[0]||"").toUpperCase().trim();
-    if(type!=="BUY" && type!=="SELL"){errors.push("L"+rowNum+": type debe ser BUY o SELL (recibido: '"+cols[0]+"')");return;}
+    var validTypes=["BUY","SELL","BUY-RF","SELL-RF"];
+    if(validTypes.indexOf(type)===-1){errors.push("L"+rowNum+": type debe ser BUY/SELL/BUY-RF/SELL-RF (recibido: '"+cols[0]+"')");return;}
+    var isRF=type==="BUY-RF" || type==="SELL-RF";
+    var isBuy=type==="BUY" || type==="BUY-RF";
 
     var ticker=(cols[1]||"").toUpperCase().trim();
     if(!ticker){errors.push("L"+rowNum+": ticker vacío");return;}
@@ -2853,20 +2862,28 @@ function parseCSVTx(){
     var price=parseFloat(cols[8]);
     var salePrice=parseFloat(cols[10]);
     var date=(cols[9]||"").trim()||today;
-    // Validación básica de fecha
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){errors.push("L"+rowNum+": fecha '"+date+"' no es YYYY-MM-DD");return;}
 
-    if(type==="BUY" && (isNaN(price)||price<=0)){errors.push("L"+rowNum+": BUY requiere price > 0");return;}
-    if(type==="SELL" && (isNaN(salePrice)||salePrice<=0)){errors.push("L"+rowNum+": SELL requiere sale_price > 0");return;}
+    if(isBuy && (isNaN(price)||price<=0)){errors.push("L"+rowNum+": "+type+" requiere price > 0");return;}
+    if(!isBuy && (isNaN(salePrice)||salePrice<=0)){errors.push("L"+rowNum+": "+type+" requiere sale_price > 0");return;}
 
-    var existing=RV.find(function(a){return a.k===ticker;});
-    var isNew=type==="BUY" && !existing;
+    // Buscar en RV o RF según corresponda
+    var existing;
+    if(isRF){
+      existing=RF.find(function(b){return b.k===ticker;});
+    } else {
+      existing=RV.find(function(a){return a.k===ticker;});
+    }
+    var isNew=isBuy && !existing;
 
-    if(type==="SELL" && !existing){errors.push("L"+rowNum+": SELL de '"+ticker+"' pero no existe en el portfolio");return;}
-    if(type==="SELL" && qty>existing.n){errors.push("L"+rowNum+": SELL qty="+qty+" pero solo tenés "+existing.n+" de "+ticker);return;}
+    if(!isBuy && !existing){errors.push("L"+rowNum+": "+type+" de '"+ticker+"' pero no existe en el portfolio");return;}
+    if(!isBuy){
+      var avail=isRF?existing.no:existing.n;
+      if(qty>avail){errors.push("L"+rowNum+": "+type+" qty="+qty+" pero solo tenés "+avail+" de "+ticker);return;}
+    }
 
     parsed.push({
-      type:type, ticker:ticker,
+      type:type, isRF:isRF, isBuy:isBuy, ticker:ticker,
       name:cols[2]||"", broker:cols[3]||"", sector:cols[4]||"", tipo:(cols[5]||"").toUpperCase(),
       cr:parseFloat(cols[6])||1,
       qty:qty, price:price, date:date,
@@ -2892,59 +2909,106 @@ function parseCSVTx(){
 
   // Calcular el resultado esperado para preview
   parsed.forEach(function(p){
-    if(p.type==="BUY"){
+    if(p.isRF){
+      // ===== RENTA FIJA =====
+      if(p.isBuy){
+        // BUY-RF: pc = precio cada 100 nominales; vi = no*pc/100
+        var costAmt=Math.round(p.qty*p.price/100*100)/100;
+        if(p.isNew){
+          p._calc={costAmt:costAmt};
+          p._result="Crear nuevo bono/ON · "+p.qty.toLocaleString()+" u × $"+p.price+"/100 = $"+costAmt.toFixed(2);
+        } else {
+          var oldNo=p.asset.no, oldPc=p.asset.pc;
+          var newNo=oldNo+p.qty;
+          // PPC ponderado para RF: usa precio cada 100
+          var newPc=(oldNo*oldPc + p.qty*p.price)/newNo;
+          p._calc={newNo:newNo, newPc:Math.round(newPc*100)/100, costAmt:costAmt};
+          p._result="Precio: $"+oldPc.toFixed(2)+" → $"+p._calc.newPc.toFixed(2)+" · Noms: "+oldNo.toLocaleString()+" → "+newNo.toLocaleString()+" · Costo: $"+costAmt.toFixed(2);
+        }
+      } else {
+        // SELL-RF
+        var pcRF=p.asset.pc;
+        var costBase=Math.round(p.qty*pcRF/100*100)/100;
+        var saleAmt=Math.round(p.qty*p.sale_price/100*100)/100;
+        var pnlRF=Math.round((saleAmt-costBase)*100)/100;
+        var pctRF=costBase>0?Math.round(pnlRF/costBase*1000)/10:0;
+        var isTotalRF=p.qty===p.asset.no;
+        p._calc={pnl:pnlRF, pct:pctRF, saleAmt:saleAmt, isTotal:isTotalRF};
+        p._result=(isTotalRF?"VENTA TOTAL · ":"Venta parcial "+p.qty.toLocaleString()+"/"+p.asset.no.toLocaleString()+" · ")
+          +"P&L: "+(pnlRF>=0?"+":"")+"$"+pnlRF.toFixed(2)+" ("+(pctRF>=0?"+":"")+pctRF+"%) · Cobrás $"+saleAmt.toFixed(2);
+      }
+    } else if(p.isBuy){
+      // ===== RV BUY =====
       if(p.isNew){
-        p._result="Crear nuevo activo · "+p.qty+" u × $"+p.price+" = $"+(p.qty*p.price).toFixed(2);
+        p._calc={costAmt:p.qty*p.price};
+        p._result="Crear nuevo activo · "+p.qty+" u × $"+p.price+" = $"+p._calc.costAmt.toFixed(2);
       } else {
         var oldN=p.asset.n, oldPpc=p.asset.ppc, oldD=p.asset.d||0;
         var newN=oldN+p.qty;
         var newPpc=(oldN*oldPpc + p.qty*p.price)/newN;
-        // Días ponderados
         var dNew=Math.max(1,Math.round((new Date()-new Date(p.date))/86400000));
         var newD=Math.round((oldN*oldD + p.qty*dNew)/newN);
         p._calc={newN:newN, newPpc:Math.round(newPpc*100)/100, newD:newD, dNew:dNew, costAmt:p.qty*p.price};
         p._result="PPC: $"+oldPpc.toFixed(2)+" → $"+p._calc.newPpc.toFixed(2)+" · Noms: "+oldN+" → "+newN+" · Costo: $"+p._calc.costAmt.toFixed(2);
       }
     } else {
-      // SELL
+      // ===== RV SELL =====
       var ppc=p.asset.ppc;
       var pnl=Math.round((p.sale_price-ppc)*p.qty*100)/100;
       var pct=ppc>0?Math.round((p.sale_price-ppc)/ppc*1000)/10:0;
-      var saleAmt=Math.round(p.qty*p.sale_price*100)/100;
+      var saleAmtRV=Math.round(p.qty*p.sale_price*100)/100;
       var isTotal=p.qty===p.asset.n;
-      p._calc={pnl:pnl, pct:pct, saleAmt:saleAmt, isTotal:isTotal};
+      p._calc={pnl:pnl, pct:pct, saleAmt:saleAmtRV, isTotal:isTotal};
       p._result=(isTotal?"VENTA TOTAL · ":"Venta parcial "+p.qty+"/"+p.asset.n+" · ")
-        +"P&L: "+(pnl>=0?"+":"")+"$"+pnl.toFixed(2)+" ("+(pct>=0?"+":"")+pct+"%) · Cobrás $"+saleAmt.toFixed(2);
+        +"P&L: "+(pnl>=0?"+":"")+"$"+pnl.toFixed(2)+" ("+(pct>=0?"+":"")+pct+"%) · Cobrás $"+saleAmtRV.toFixed(2);
     }
   });
 
   _csvTxParsed=parsed;
 
   // Resumen
-  var nBuy=parsed.filter(function(p){return p.type==="BUY";}).length;
-  var nSell=parsed.filter(function(p){return p.type==="SELL";}).length;
+  var nBuyRV=parsed.filter(function(p){return p.type==="BUY";}).length;
+  var nSellRV=parsed.filter(function(p){return p.type==="SELL";}).length;
+  var nBuyRF=parsed.filter(function(p){return p.type==="BUY-RF";}).length;
+  var nSellRF=parsed.filter(function(p){return p.type==="SELL-RF";}).length;
   var nNew=parsed.filter(function(p){return p.isNew;}).length;
-  var totBuy=parsed.filter(function(p){return p.type==="BUY";}).reduce(function(s,p){return s+p.qty*p.price;},0);
-  var totSell=parsed.filter(function(p){return p.type==="SELL";}).reduce(function(s,p){return s+p._calc.saleAmt;},0);
-  $("csvTxSummary").innerHTML="<b style='color:#a78bfa'>"+parsed.length+" transacciones</b> &middot; "
-    +"<span style='color:#10b981'>"+nBuy+" compras"+(nNew?" ("+nNew+" nuevos)":"")+"</span> "
-    +(totBuy>0?"<span style='color:var(--text3)'>($"+totBuy.toFixed(2)+")</span> &middot; ":" &middot; ")
-    +"<span style='color:#ef4444'>"+nSell+" ventas</span>"
-    +(totSell>0?" <span style='color:var(--text3)'>($"+totSell.toFixed(2)+")</span>":"");
+  var totBuy=parsed.filter(function(p){return p.isBuy;}).reduce(function(s,p){return s+p._calc.costAmt;},0);
+  var totSell=parsed.filter(function(p){return !p.isBuy;}).reduce(function(s,p){return s+p._calc.saleAmt;},0);
+  var summaryHtml="<b style='color:#a78bfa'>"+parsed.length+" transacciones</b>";
+  if(nBuyRV+nSellRV>0)summaryHtml+=" &middot; <span style='color:var(--text3)'>RV:</span> "
+    +"<span style='color:#10b981'>"+nBuyRV+" buy</span>"
+    +" / <span style='color:#ef4444'>"+nSellRV+" sell</span>";
+  if(nBuyRF+nSellRF>0)summaryHtml+=" &middot; <span style='color:var(--text3)'>RF:</span> "
+    +"<span style='color:#10b981'>"+nBuyRF+" buy</span>"
+    +" / <span style='color:#ef4444'>"+nSellRF+" sell</span>";
+  if(nNew>0)summaryHtml+=" &middot; <span style='color:#818cf8'>"+nNew+" nuevos</span>";
+  summaryHtml+="<br><span style='color:var(--text3);font-size:10px'>Total compras: $"+totBuy.toFixed(2)+" &middot; Total ventas: $"+totSell.toFixed(2)+"</span>";
+  $("csvTxSummary").innerHTML=summaryHtml;
 
   // Renderizar tabla preview
   var body=$("csvTxPreviewBody");
   body.innerHTML=parsed.map(function(p,i){
-    var opBdg=p.type==="BUY"
-      ?(p.isNew?'<span style="font-size:9px;color:#818cf8;background:rgba(129,140,248,.15);padding:2px 6px;border-radius:3px">BUY-NEW</span>'
-                :'<span style="font-size:9px;color:#10b981;background:rgba(16,185,129,.15);padding:2px 6px;border-radius:3px">BUY</span>')
-      :'<span style="font-size:9px;color:#ef4444;background:rgba(239,68,68,.15);padding:2px 6px;border-radius:3px">SELL</span>';
-    var priceCell=p.type==="BUY"?"$"+p.price.toFixed(2):"$"+p.sale_price.toFixed(2);
+    var opBdg;
+    if(p.type==="BUY"){
+      opBdg=p.isNew
+        ?'<span style="font-size:9px;color:#818cf8;background:rgba(129,140,248,.15);padding:2px 6px;border-radius:3px">BUY-NEW</span>'
+        :'<span style="font-size:9px;color:#10b981;background:rgba(16,185,129,.15);padding:2px 6px;border-radius:3px">BUY</span>';
+    } else if(p.type==="BUY-RF"){
+      opBdg=p.isNew
+        ?'<span style="font-size:9px;color:#818cf8;background:rgba(129,140,248,.15);padding:2px 6px;border-radius:3px">BUY-RF-NEW</span>'
+        :'<span style="font-size:9px;color:#fbbf24;background:rgba(251,191,36,.15);padding:2px 6px;border-radius:3px">BUY-RF</span>';
+    } else if(p.type==="SELL"){
+      opBdg='<span style="font-size:9px;color:#ef4444;background:rgba(239,68,68,.15);padding:2px 6px;border-radius:3px">SELL</span>';
+    } else { // SELL-RF
+      opBdg='<span style="font-size:9px;color:#ef4444;background:rgba(239,68,68,.15);padding:2px 6px;border-radius:3px;border:1px solid #fbbf24">SELL-RF</span>';
+    }
+    var priceCell=p.isBuy?"$"+p.price.toFixed(2):"$"+p.sale_price.toFixed(2);
+    if(p.isRF)priceCell+="<br><span style='font-size:9px;color:var(--text3)'>(c/100)</span>";
     return '<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:7px"><input type="checkbox" id="csvTxck'+i+'" checked style="width:14px;height:14px;accent-color:#a78bfa"></td>'
       +'<td style="padding:7px">'+opBdg+'</td>'
       +'<td style="padding:7px;font-weight:600">'+p.ticker+(p.note?'<div style="font-size:9px;color:var(--text3);font-weight:400">'+p.note.slice(0,40)+'</div>':'')+'</td>'
-      +'<td style="padding:7px;text-align:right;font-family:\'IBM Plex Mono\',monospace">'+p.qty+'</td>'
+      +'<td style="padding:7px;text-align:right;font-family:\'IBM Plex Mono\',monospace">'+p.qty.toLocaleString()+'</td>'
       +'<td style="padding:7px;text-align:right;font-family:\'IBM Plex Mono\',monospace">'+priceCell+'</td>'
       +'<td style="padding:7px;font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:var(--text3)">'+p.date+'</td>'
       +'<td style="padding:7px;font-size:10px;color:var(--text2)">'+p._result+'</td>'
@@ -2971,13 +3035,70 @@ function applyCSVTx(){
 
   toApply.forEach(function(p){
     try{
-      if(p.type==="BUY"){
+      if(p.isRF){
+        // ========== RENTA FIJA ==========
+        if(p.isBuy){
+          if(p.isNew){
+            // Crear nuevo bono/ON con datos mínimos
+            var validTp=["ON","Bono","BONO"];
+            var tpNew=p.tipo==="BONO"?"Bono":(p.tipo||"ON");
+            if(["ON","Bono"].indexOf(tpNew)===-1)tpNew="ON";
+            var viRF=p._calc.costAmt;
+            RF.push({
+              k:p.ticker, nm:p.name||p.ticker,
+              tp:tpNew, tc:"USD", // por default cotización en USD; el usuario puede editarlo
+              no:p.qty, pc:p.price, pa:p.price, vi:viRF, va:viRF,
+              rc:0, cu:0, rt:0, rp:0, ca:0,
+              ti:0, cs:0, ve:"", mo:"USD"
+            });
+            totalSpent+=viRF;
+            labels.push("BUY-RF "+p.ticker+" (nuevo, "+p.qty.toLocaleString()+"u)");
+          } else {
+            // Consolidar compra en RF existente
+            var b=p.asset;
+            var cRF=p._calc;
+            b.pc=cRF.newPc;
+            b.no=cRF.newNo;
+            b.vi=Math.round(b.no*b.pc/100*100)/100;
+            b.va=Math.round(b.va + cRF.costAmt*100)/100;
+            // Recalcular rendimiento
+            b.rc=Math.round((b.va-b.vi)*100)/100;
+            b.rt=Math.round((b.rc+(b.cu||0))*100)/100;
+            b.rp=b.vi>0?Math.round(b.rt/b.vi*1000)/10:0;
+            totalSpent+=cRF.costAmt;
+            labels.push("BUY-RF "+p.ticker+" (+"+p.qty.toLocaleString()+"u)");
+          }
+        } else {
+          // SELL-RF
+          var b2=p.asset, c2RF=p._calc;
+          REALIZED.push({
+            k:p.ticker, nm:b2.nm, n:p.qty, ppc:b2.pc,
+            salePrice:p.sale_price, pnl:c2RF.pnl, pct:c2RF.pct,
+            date:p.date.split("-").reverse().join("/"),
+            type:"RF",
+            note:p.note||""
+          });
+          if(c2RF.isTotal){
+            var idxRF=RF.findIndex(function(x){return x.k===p.ticker;});
+            if(idxRF>=0)RF.splice(idxRF,1);
+          } else {
+            b2.no=b2.no-p.qty;
+            b2.vi=Math.round(b2.no*b2.pc/100*100)/100;
+            b2.va=Math.round(b2.no*b2.pa/100*100)/100;
+            b2.rc=Math.round((b2.va-b2.vi)*100)/100;
+            b2.rt=Math.round((b2.rc+(b2.cu||0))*100)/100;
+            b2.rp=b2.vi>0?Math.round(b2.rt/b2.vi*1000)/10:0;
+          }
+          totalReceived+=c2RF.saleAmt;
+          labels.push("SELL-RF "+p.ticker+" "+p.qty.toLocaleString()+"u");
+        }
+      } else if(p.isBuy){
+        // ========== RV BUY ==========
         if(p.isNew){
-          // Crear activo nuevo
           var validTipos=["CEDEAR","CEDEAR-ETF","ADR","ARG","USA"];
           var tipoNew=validTipos.indexOf(p.tipo)>=0?p.tipo:"CEDEAR";
           var dDays=Math.max(1,Math.round((new Date()-new Date(p.date))/86400000));
-          var vi=p.qty*p.price, va=vi; // V.Actual = V.Inicial al momento de crear
+          var vi=p.qty*p.price, va=vi;
           RV.push({
             k:p.ticker, nm:p.name||p.ticker,
             br:p.broker||"Balanz", sec:p.sector||"N/D",
@@ -2992,13 +3113,11 @@ function applyCSVTx(){
           totalSpent+=vi;
           labels.push("BUY "+p.ticker+" (nuevo, "+p.qty+"u)");
         } else {
-          // Consolidar compra en existente
           var a=p.asset;
           var c=p._calc;
           a.ppc=c.newPpc;
           a.n=c.newN;
           a.d=c.newD;
-          // V.Inicial sube por la nueva compra; V.Actual sube por el costo (asumimos precio actual = precio de compra)
           a.vi=Math.round((a.vi + c.costAmt)*100)/100;
           a.va=Math.round((a.va + c.costAmt)*100)/100;
           recalcRV(a);
@@ -3007,13 +3126,13 @@ function applyCSVTx(){
           labels.push("BUY "+p.ticker+" (+"+p.qty+"u)");
         }
       } else {
-        // SELL
+        // ========== RV SELL ==========
         var a2=p.asset;
         var c2=p._calc;
         REALIZED.push({
           k:p.ticker, nm:a2.nm, n:p.qty, ppc:a2.ppc,
           salePrice:p.sale_price, pnl:c2.pnl, pct:c2.pct,
-          date:p.date.split("-").reverse().join("/"), // YYYY-MM-DD → DD/MM/YYYY
+          date:p.date.split("-").reverse().join("/"),
           type:"RV",
           note:p.note||""
         });
@@ -3023,7 +3142,6 @@ function applyCSVTx(){
         } else {
           a2.n=a2.n-p.qty;
           a2.vi=Math.round(a2.n*a2.ppc*100)/100;
-          // V.Actual: lo reducimos proporcionalmente (asumimos misma valuación/u)
           var newVa=Math.round(a2.n*(a2.va/(a2.n+p.qty))*100)/100;
           a2.va=newVa;
           recalcRV(a2);
@@ -3038,7 +3156,7 @@ function applyCSVTx(){
   });
 
   saveRealized();
-  reRV();refreshKPIs();saveToFirestore();
+  reRV();reRF();refreshKPIs();saveToFirestore();
   closeCSVTxModal();
 
   if(errors.length){
@@ -5307,9 +5425,9 @@ setTimeout(function(){
 <div class="mo" id="csvTxModal" style="display:none" onclick="if(event.target===this)closeCSVTxModal()">
   <div class="mc" style="max-width:880px;max-height:92vh;overflow-y:auto">
     <button class="mcls" onclick="closeCSVTxModal()">×</button>
-    <h3 style="margin:0 0 6px 0;color:#a78bfa">📁 Importar compras / ventas desde CSV</h3>
+    <h3 style="margin:0 0 6px 0;color:#a78bfa">📁 Importar transacciones (RV y RF) desde CSV</h3>
     <div style="font-size:11px;color:var(--text3);margin-bottom:14px">
-      Pegá un CSV de transacciones (compras o ventas) o subí un archivo. Vas a poder revisar cada operación antes de aplicar.
+      Pegá un CSV de transacciones (compras o ventas de RV y RF) o subí un archivo. Vas a poder revisar cada operación antes de aplicar.
     </div>
 
     <div id="csvTxStep1">
@@ -5320,22 +5438,37 @@ setTimeout(function(){
         <span style="font-size:10px;color:var(--text3);flex:1">o pegá el contenido abajo</span>
       </div>
 
-      <textarea id="csvTxInput" placeholder="type,ticker,name,broker,sector,tipo,cr,qty,price,date,sale_price,note&#10;BUY,KO,Coca-Cola,Balanz,Bebidas,CEDEAR,5,10,14.20,2026-05-10,,&#10;BUY,GGAL,Grupo Financiero Galicia,Balanz,Banco ARG,ADR,10,50,5.50,2026-05-10,,Compra en oferta&#10;SELL,SQM.E,,,,,,5,,2026-05-12,95.00,Venta parcial" style="width:100%;height:180px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box;resize:vertical"></textarea>
+      <textarea id="csvTxInput" placeholder="type,ticker,name,broker,sector,tipo,cr,qty,price,date,sale_price,note&#10;BUY,KO,Coca-Cola,Balanz,Bebidas,CEDEAR,5,10,14.20,2026-05-10,,&#10;BUY,GGAL,Grupo Galicia,Balanz,Banco ARG,ADR,10,50,5.50,2026-05-10,,&#10;SELL,SQM.E,,,,,,5,,2026-05-12,95.00,Venta parcial&#10;BUY-RF,YM38D,ON YPF Clase 38,IOL,Energia,ON,,2500,101.50,2026-05-15,,Compra ON IOL" style="width:100%;height:180px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box;resize:vertical"></textarea>
 
       <details style="margin-top:10px;font-size:11px;color:var(--text3)">
         <summary style="cursor:pointer;color:var(--text2);user-select:none">📑 Formato esperado y reglas</summary>
         <div style="padding:10px;background:var(--bg3);border-radius:6px;margin-top:6px;line-height:1.55">
           <div><b style="color:var(--text)">Columnas (en este orden):</b></div>
           <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a78bfa;margin:4px 0">type,ticker,name,broker,sector,tipo,cr,qty,price,date,sale_price,note</div>
-          <div style="margin-top:6px"><b style="color:var(--text)">Reglas:</b></div>
+          <div style="margin-top:8px"><b style="color:var(--text)">Tipos de operación (campo <code>type</code>):</b></div>
           <ul style="margin:4px 0 0 18px;padding:0">
-            <li><b>type</b>: BUY o SELL (obligatorio)</li>
-            <li><b>ticker, qty, date</b>: obligatorios. Si date está vacío, se usa hoy.</li>
-            <li>Para <b>BUY</b>: <b>price</b> es el precio de compra por unidad. Si el ticker ya existe, se recalcula PPC y días ponderados (no reemplaza). Si es nuevo, los campos <b>name/broker/sector/tipo/cr</b> se usan para crearlo.</li>
-            <li>Para <b>SELL</b>: <b>sale_price</b> es el precio de venta por unidad. Se registra en el historial con P&L. Si qty = total, elimina el activo.</li>
-            <li><b>note</b>: texto opcional. Para ventas queda guardado.</li>
-            <li>Líneas vacías y que empiecen con <b>#</b> se ignoran.</li>
+            <li><b style="color:#10b981">BUY</b> / <b style="color:#ef4444">SELL</b> → Renta Variable (CEDEARs, ADRs, acciones)</li>
+            <li><b style="color:#fbbf24">BUY-RF</b> / <b style="color:#fbbf24">SELL-RF</b> → Renta Fija (Bonos, ONs)</li>
+          </ul>
+          <div style="margin-top:8px"><b style="color:var(--text)">Reglas comunes:</b></div>
+          <ul style="margin:4px 0 0 18px;padding:0">
+            <li><b>ticker, qty, date</b>: obligatorios. Si date está vacío, se usa hoy. Formato fecha: YYYY-MM-DD.</li>
+            <li><b>note</b>: texto opcional, queda guardado.</li>
+            <li>Líneas vacías y que empiecen con <b>#</b> se ignoran (comentarios).</li>
             <li>La primera línea puede ser el header (se detecta automáticamente).</li>
+          </ul>
+          <div style="margin-top:8px"><b style="color:var(--text)">Reglas RV (BUY/SELL):</b></div>
+          <ul style="margin:4px 0 0 18px;padding:0">
+            <li>BUY: <b>price</b> = precio compra por unidad. Si el ticker ya existe, recalcula PPC y días ponderados. Si es nuevo, usa <b>name/broker/sector/tipo/cr</b>.</li>
+            <li>SELL: <b>sale_price</b> = precio venta por unidad. Registra en historial con P&L.</li>
+            <li><b>tipo</b> RV: CEDEAR, CEDEAR-ETF, ADR, ARG, USA.</li>
+          </ul>
+          <div style="margin-top:8px"><b style="color:var(--text)">Reglas RF (BUY-RF/SELL-RF):</b></div>
+          <ul style="margin:4px 0 0 18px;padding:0">
+            <li>BUY-RF: <b>price</b> = precio cada 100 nominales (ej. $101.50). <b>qty</b> = nominales totales. V.Invertido = qty × price ÷ 100.</li>
+            <li>SELL-RF: <b>sale_price</b> = precio venta cada 100 nominales.</li>
+            <li><b>tipo</b> RF: ON o Bono. <b>cr</b> no se usa.</li>
+            <li>Datos faltantes (vencimiento, cupón, TIR) se completan a mano en el modal de edición de RF después de importar.</li>
           </ul>
         </div>
       </details>
